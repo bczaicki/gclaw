@@ -1,0 +1,29 @@
+[provider.ollama]
+url = "http://localhost:11434"
+default_model = "qwen3.5:9b"
+
+[agent]
+max_iterations = 10
+system_prompt = "You are a helpful assistant."
+# workspace_dir = "./workspace"  # Path to SOUL.md, IDENTITY.md, etc. (default: ./workspace)
+
+[channels.telegram]
+enabled = false
+token = ""
+
+[channels.discord]
+enabled = false
+token = ""
+
+[channels.slack]
+enabled = false
+token = ""
+
+[channels.whatsapp]
+enabled = false
+token = ""
+
+[container]
+enabled = false
+runtime = "docker"
+image = "gclaw-sandbox:latest"

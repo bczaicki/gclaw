@@ -1,0 +1,145 @@
+use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct Config {
+    #[serde(default)]
+    pub provider: ProviderConfig,
+    #[serde(default)]
+    pub agent: AgentConfig,
+    #[serde(default)]
+    pub channels: ChannelsConfig,
+    #[serde(default)]
+    pub container: ContainerConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ProviderConfig {
+    #[serde(default)]
+    pub ollama: OllamaConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OllamaConfig {
+    #[serde(default = "default_ollama_url")]
+    pub url: String,
+    #[serde(default = "default_model")]
+    pub default_model: String,
+}
+
+fn default_ollama_url() -> String {
+    "http://localhost:11434".to_string()
+}
+
+fn default_model() -> String {
+    "qwen3.5:9b".to_string()
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentConfig {
+    #[serde(default = "default_max_iterations")]
+    pub max_iterations: usize,
+    #[serde(default = "default_system_prompt")]
+    pub system_prompt: String,
+    #[serde(default)]
+    pub workspace_dir: Option<String>,
+}
+
+fn default_max_iterations() -> usize {
+    10
+}
+
+fn default_system_prompt() -> String {
+    "You are a helpful assistant.".to_string()
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ChannelsConfig {
+    #[serde(default)]
+    pub telegram: ChannelEntry,
+    #[serde(default)]
+    pub discord: ChannelEntry,
+    #[serde(default)]
+    pub slack: ChannelEntry,
+    #[serde(default)]
+    pub whatsapp: ChannelEntry,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ChannelEntry {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default)]
+    pub token: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ContainerConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default = "default_runtime")]
+    pub runtime: String,
+    #[serde(default = "default_image")]
+    pub image: String,
+}
+
+fn default_runtime() -> String {
+    "docker".to_string()
+}
+
+fn default_image() -> String {
+    "gclaw-sandbox:latest".to_string()
+}
+
+impl Default for OllamaConfig {
+    fn default() -> Self {
+        Self {
+            url: default_ollama_url(),
+            default_model: default_model(),
+        }
+    }
+}
+
+impl Default for AgentConfig {
+    fn default() -> Self {
+        Self {
+            max_iterations: default_max_iterations(),
+            system_prompt: default_system_prompt(),
+            workspace_dir: None,
+        }
+    }
+}
+
+impl Default for ContainerConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            runtime: default_runtime(),
+            image: default_image(),
+        }
+    }
+}
+
+impl Config {
+    pub fn load() -> crate::Result<Self> {
+        let path = Self::config_path();
+        if path.exists() {
+            let content = std::fs::read_to_string(&path)
+                .map_err(|e| crate::GclawError::Config(format!("Failed to read config: {e}")))?;
+            toml::from_str(&content)
+                .map_err(|e| crate::GclawError::Config(format!("Failed to parse config: {e}")))
+        } else {
+            Ok(Config::default())
+        }
+    }
+
+    pub fn config_path() -> PathBuf {
+        if let Ok(path) = std::env::var("GCLAW_CONFIG") {
+            return PathBuf::from(path);
+        }
+        dirs::config_dir()
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join("gclaw")
+            .join("config.toml")
+    }
+}
