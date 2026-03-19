@@ -19,7 +19,7 @@ description = "Local-first AI agent gateway"
 gclaw-core = { path = "crates/gclaw-core" }
 gclaw-agent = { path = "crates/gclaw-agent" }
 gclaw-providers = { path = "crates/gclaw-providers" }
-gclaw-channels = { path = "crates/gclaw-channels" }
+gclaw-channels = { path = "crates/gclaw-channels", features = ["all-channels"] }
 gclaw-tui = { path = "crates/gclaw-tui" }
 tokio = { version = "1", features = ["full"] }
 clap = { version = "4", features = ["derive"] }

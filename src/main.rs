@@ -2,16 +2,17 @@ use clap::Parser;
 use gclaw_agent::{AgentLoop, ShellExecTool, ToolExecutor};
 use gclaw_channels::TuiChannel;
 use gclaw_core::traits::Channel;
-use gclaw_core::types::{AgentEvent, InboundMessage};
+use gclaw_core::types::{AgentEvent, InboundMessage, OutboundMessage};
 use gclaw_core::workspace::{resolve_workspace_dir, Workspace};
 use gclaw_core::{Config, SqliteMemory};
 use gclaw_providers::OllamaProvider;
 use gclaw_tui::app::App;
 use gclaw_tui::event::EventHandler;
 use gclaw_tui::Tui;
+use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::mpsc;
-use tracing::info;
+use tracing::{error, info, warn};
 
 #[derive(Parser)]
 #[command(name = "gclaw", version, about = "Local-first AI agent gateway")]
@@ -23,6 +24,10 @@ struct Cli {
     /// Model to use
     #[arg(short, long)]
     model: Option<String>,
+
+    /// Run without TUI (headless mode for messaging channels only)
+    #[arg(long)]
+    headless: bool,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -85,63 +90,173 @@ fn main() -> anyhow::Result<()> {
         system_prompt,
     ));
 
-    // Channels for TUI <-> Gateway communication
-    let (tui_input_tx, tui_input_rx) = mpsc::unbounded_channel::<String>();
-    let (agent_event_tx, agent_event_rx) = mpsc::unbounded_channel::<AgentEvent>();
-
-    let conversation_id = format!("tui-{}", std::process::id());
-
-    // Gateway message channel
+    // Gateway message channel — all channels send InboundMessages here
     let (gateway_tx, mut gateway_rx) = mpsc::channel::<InboundMessage>(100);
 
-    // TUI channel adapter
-    let tui_channel = TuiChannel::new(
-        tui_input_rx,
-        agent_event_tx.clone(),
-        conversation_id.clone(),
-    );
+    // Collect all active channels for response routing
+    let channel_map = rt.block_on(start_channels(&config, gateway_tx.clone()));
+    let channel_map = Arc::new(channel_map);
 
-    // Start TUI channel in background
-    rt.block_on(async {
-        tui_channel
-            .start(gateway_tx)
-            .await
-            .expect("Failed to start TUI channel");
-    });
-
-    // Spawn gateway message processor
+    // Spawn gateway message processor for messaging channels
     let agent_clone = agent.clone();
-    let event_tx_clone = agent_event_tx.clone();
+    let channels = channel_map.clone();
     rt.spawn(async move {
         while let Some(msg) = gateway_rx.recv().await {
             let agent = agent_clone.clone();
-            let event_tx = event_tx_clone.clone();
+            let channels = channels.clone();
             tokio::spawn(async move {
-                match agent
-                    .process(&msg.conversation_id, &msg.content, Some(event_tx.clone()))
-                    .await
-                {
-                    Ok(_) => {}
+                let convo_id = msg.conversation_id.clone();
+                let channel_name = msg.channel_name.clone();
+
+                match agent.process(&convo_id, &msg.content, None).await {
+                    Ok(response) => {
+                        if let Some(channel) = channels.get(&channel_name) {
+                            let out = OutboundMessage {
+                                channel_name: channel_name.clone(),
+                                conversation_id: convo_id,
+                                content: response,
+                            };
+                            if let Err(e) = channel.send(out).await {
+                                error!("Failed to send response on {channel_name}: {e}");
+                            }
+                        }
+                    }
                     Err(e) => {
-                        let _ = event_tx.send(AgentEvent::Error(e.to_string()));
+                        warn!("Agent error for {convo_id}: {e}");
+                        if let Some(channel) = channels.get(&channel_name) {
+                            let out = OutboundMessage {
+                                channel_name: channel_name.clone(),
+                                conversation_id: convo_id,
+                                content: format!("Error: {e}"),
+                            };
+                            let _ = channel.send(out).await;
+                        }
                     }
                 }
             });
         }
     });
 
-    // Run TUI on main thread
-    let mut tui = Tui::new()?;
-    let mut app = App::new(model, conversation_id);
-    if workspace.bootstrap.is_some() {
-        app = app.with_onboarding(workspace_dir);
-    }
-    let mut events = EventHandler::new(agent_event_rx);
+    if cli.headless {
+        info!("Running in headless mode (no TUI)");
+        rt.block_on(async {
+            tokio::signal::ctrl_c()
+                .await
+                .expect("Failed to listen for ctrl-c");
+        });
+    } else {
+        // TUI mode — gets its own event channel for streaming
+        let (tui_input_tx, tui_input_rx) = mpsc::unbounded_channel::<String>();
+        let (agent_event_tx, agent_event_rx) = mpsc::unbounded_channel::<AgentEvent>();
+        let conversation_id = format!("tui-{}", std::process::id());
 
-    let result = tui.run(&mut app, &mut events, &tui_input_tx);
-    tui.restore()?;
-    result?;
+        let tui_channel = TuiChannel::new(
+            tui_input_rx,
+            agent_event_tx.clone(),
+            conversation_id.clone(),
+        );
+
+        let (tui_gw_tx, mut tui_gw_rx) = mpsc::channel::<InboundMessage>(100);
+        rt.block_on(async {
+            tui_channel
+                .start(tui_gw_tx)
+                .await
+                .expect("Failed to start TUI channel");
+        });
+
+        // TUI gateway processor (supports streaming via event_tx)
+        let tui_agent = agent.clone();
+        let tui_event_tx = agent_event_tx.clone();
+        rt.spawn(async move {
+            while let Some(msg) = tui_gw_rx.recv().await {
+                let agent = tui_agent.clone();
+                let event_tx = tui_event_tx.clone();
+                tokio::spawn(async move {
+                    match agent
+                        .process(&msg.conversation_id, &msg.content, Some(event_tx.clone()))
+                        .await
+                    {
+                        Ok(_) => {}
+                        Err(e) => {
+                            let _ = event_tx.send(AgentEvent::Error(e.to_string()));
+                        }
+                    }
+                });
+            }
+        });
+
+        let mut tui = Tui::new()?;
+        let mut app = App::new(model, conversation_id);
+        if workspace.bootstrap.is_some() {
+            app = app.with_onboarding(workspace_dir);
+        }
+        let mut events = EventHandler::new(agent_event_rx);
+
+        let result = tui.run(&mut app, &mut events, &tui_input_tx);
+        tui.restore()?;
+        result?;
+    }
 
     info!("gclaw shutting down");
     Ok(())
+}
+
+/// Start all enabled messaging channels and return a map for response routing.
+async fn start_channels(
+    config: &Config,
+    gateway_tx: mpsc::Sender<InboundMessage>,
+) -> HashMap<String, Arc<dyn Channel>> {
+    let mut map: HashMap<String, Arc<dyn Channel>> = HashMap::new();
+
+    if config.channels.telegram.enabled {
+        let ch = Arc::new(gclaw_channels::TelegramChannel::new(
+            &config.channels.telegram,
+        ));
+        match ch.start(gateway_tx.clone()).await {
+            Ok(()) => {
+                info!("Telegram channel started");
+                map.insert("telegram".to_string(), ch);
+            }
+            Err(e) => error!("Failed to start Telegram: {e}"),
+        }
+    }
+
+    if config.channels.discord.enabled {
+        let ch = Arc::new(gclaw_channels::DiscordChannel::new(
+            &config.channels.discord,
+        ));
+        match ch.start(gateway_tx.clone()).await {
+            Ok(()) => {
+                info!("Discord channel started");
+                map.insert("discord".to_string(), ch);
+            }
+            Err(e) => error!("Failed to start Discord: {e}"),
+        }
+    }
+
+    if config.channels.slack.enabled {
+        let ch = Arc::new(gclaw_channels::SlackChannel::new(&config.channels.slack));
+        match ch.start(gateway_tx.clone()).await {
+            Ok(()) => {
+                info!("Slack channel started");
+                map.insert("slack".to_string(), ch);
+            }
+            Err(e) => error!("Failed to start Slack: {e}"),
+        }
+    }
+
+    if config.channels.whatsapp.enabled {
+        let ch = Arc::new(gclaw_channels::WhatsAppChannel::new(
+            &config.channels.whatsapp,
+        ));
+        match ch.start(gateway_tx.clone()).await {
+            Ok(()) => {
+                info!("WhatsApp channel started");
+                map.insert("whatsapp".to_string(), ch);
+            }
+            Err(e) => error!("Failed to start WhatsApp: {e}"),
+        }
+    }
+
+    map
 }

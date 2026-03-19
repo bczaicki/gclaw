@@ -4,8 +4,33 @@ version = "0.1.0"
 edition = "2021"
 license = "LGPL-2.1"
 
+[features]
+default = []
+telegram = ["teloxide"]
+discord = ["serenity"]
+slack = ["dep:reqwest", "dep:serde", "dep:serde_json"]
+whatsapp = ["axum", "dep:reqwest", "dep:serde", "dep:serde_json"]
+all-channels = ["telegram", "discord", "slack", "whatsapp"]
+
 [dependencies]
 gclaw-core = { path = "../gclaw-core" }
-tokio = { version = "1", features = ["sync"] }
 async-trait = "0.1"
 tracing = "0.1"
+
+# Always needed for the TUI channel and Channel trait (mpsc)
+tokio = { version = "1", features = ["sync", "rt", "time"] }
+
+# Telegram
+teloxide = { version = "0.13", features = ["macros"], optional = true }
+
+# Discord
+serenity = { version = "0.12", features = ["client", "gateway", "model", "cache"], optional = true }
+
+# Shared
+dashmap = "6"
+reqwest = { version = "0.12", features = ["json"], optional = true }
+
+# WhatsApp
+axum = { version = "0.8", optional = true }
+serde = { version = "1", features = ["derive"], optional = true }
+serde_json = { version = "1", optional = true }

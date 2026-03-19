@@ -1,11 +1,19 @@
+#[cfg(feature = "discord")]
 pub mod discord;
+#[cfg(feature = "slack")]
 pub mod slack;
+#[cfg(feature = "telegram")]
 pub mod telegram;
 pub mod tui;
+#[cfg(feature = "whatsapp")]
 pub mod whatsapp;
 
+#[cfg(feature = "discord")]
 pub use discord::DiscordChannel;
+#[cfg(feature = "slack")]
 pub use slack::SlackChannel;
+#[cfg(feature = "telegram")]
 pub use telegram::TelegramChannel;
 pub use tui::TuiChannel;
+#[cfg(feature = "whatsapp")]
 pub use whatsapp::WhatsAppChannel;

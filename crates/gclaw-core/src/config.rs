@@ -56,21 +56,75 @@ fn default_system_prompt() -> String {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ChannelsConfig {
     #[serde(default)]
-    pub telegram: ChannelEntry,
+    pub telegram: TelegramConfig,
     #[serde(default)]
-    pub discord: ChannelEntry,
+    pub discord: DiscordConfig,
     #[serde(default)]
-    pub slack: ChannelEntry,
+    pub slack: SlackConfig,
     #[serde(default)]
-    pub whatsapp: ChannelEntry,
+    pub whatsapp: WhatsAppConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct ChannelEntry {
+pub struct TelegramConfig {
     #[serde(default)]
     pub enabled: bool,
     #[serde(default)]
     pub token: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct DiscordConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default)]
+    pub token: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct SlackConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    /// Bot token (xoxb-...)
+    #[serde(default)]
+    pub bot_token: String,
+    /// App-level token for Socket Mode (xapp-...)
+    #[serde(default)]
+    pub app_token: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WhatsAppConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    /// Cloud API access token
+    #[serde(default)]
+    pub access_token: String,
+    /// Phone number ID from Meta dashboard
+    #[serde(default)]
+    pub phone_number_id: String,
+    /// Webhook verify token (you choose this)
+    #[serde(default)]
+    pub verify_token: String,
+    /// Port for the webhook HTTP server
+    #[serde(default = "default_webhook_port")]
+    pub webhook_port: u16,
+}
+
+fn default_webhook_port() -> u16 {
+    8080
+}
+
+impl Default for WhatsAppConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            access_token: String::new(),
+            phone_number_id: String::new(),
+            verify_token: String::new(),
+            webhook_port: default_webhook_port(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

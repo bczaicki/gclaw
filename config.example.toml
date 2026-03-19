@@ -9,19 +9,23 @@ system_prompt = "You are a helpful assistant."
 
 [channels.telegram]
 enabled = false
-token = ""
+token = ""  # or set GCLAW_TELEGRAM_TOKEN env var
 
 [channels.discord]
 enabled = false
-token = ""
+token = ""  # or set GCLAW_DISCORD_TOKEN env var
 
 [channels.slack]
 enabled = false
-token = ""
+bot_token = ""   # xoxb-... or set GCLAW_SLACK_BOT_TOKEN
+app_token = ""   # xapp-... or set GCLAW_SLACK_APP_TOKEN
 
 [channels.whatsapp]
 enabled = false
-token = ""
+access_token = ""       # or set GCLAW_WHATSAPP_ACCESS_TOKEN
+phone_number_id = ""
+verify_token = ""
+webhook_port = 8080
 
 [container]
 enabled = false
