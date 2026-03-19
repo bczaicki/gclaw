@@ -1,0 +1,18 @@
+FROM debian:bookworm-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    git \
+    jq \
+    python3 \
+    python3-pip \
+    && rm -rf /var/lib/apt/lists/*
+
+# Non-root user for sandboxed execution
+RUN useradd -m -s /bin/bash sandbox
+USER sandbox
+WORKDIR /workspace
+
+# Default: run a shell
+CMD ["/bin/bash"]

@@ -14,6 +14,13 @@ pub struct ChatMessage {
     pub content: String,
 }
 
+#[derive(Debug, Clone)]
+pub struct Conversation {
+    pub id: String,
+    pub messages: Vec<ChatMessage>,
+    pub preview: String,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum AgentState {
     Idle,
@@ -31,6 +38,9 @@ pub struct App {
     pub model_name: String,
     pub conversation_id: String,
     pub should_quit: bool,
+    pub conversations: Vec<Conversation>,
+    pub active_conversation: usize,
+    pub show_sidebar: bool,
     pub streaming_thinking: String,
     pub streaming_content: String,
     pub is_thinking: bool,
@@ -48,8 +58,15 @@ impl App {
             mode: Mode::Insert,
             agent_state: AgentState::Idle,
             model_name,
-            conversation_id,
+            conversation_id: conversation_id.clone(),
             should_quit: false,
+            conversations: vec![Conversation {
+                id: conversation_id,
+                messages: Vec::new(),
+                preview: String::new(),
+            }],
+            active_conversation: 0,
+            show_sidebar: false,
             streaming_thinking: String::new(),
             streaming_content: String::new(),
             is_thinking: false,
@@ -148,6 +165,69 @@ impl App {
 
     pub fn toggle_thinking_collapsed(&mut self) {
         self.thinking_collapsed = !self.thinking_collapsed;
+    }
+
+    pub fn toggle_sidebar(&mut self) {
+        self.show_sidebar = !self.show_sidebar;
+    }
+
+    pub fn new_conversation(&mut self) {
+        // Save current messages into active conversation
+        self.conversations[self.active_conversation].messages = self.messages.clone();
+        if let Some(first_user_msg) = self.messages.iter().find(|m| m.sender == "You") {
+            self.conversations[self.active_conversation].preview = first_user_msg.content.clone();
+        }
+
+        let new_id = format!("conv-{}", uuid::Uuid::new_v4());
+        self.conversations.push(Conversation {
+            id: new_id.clone(),
+            messages: Vec::new(),
+            preview: String::new(),
+        });
+        self.active_conversation = self.conversations.len() - 1;
+        self.conversation_id = new_id;
+        self.messages.clear();
+        self.input.clear();
+        self.cursor_position = 0;
+        self.streaming_thinking.clear();
+        self.streaming_content.clear();
+        self.is_thinking = false;
+        self.agent_state = AgentState::Idle;
+    }
+
+    pub fn switch_conversation(&mut self, index: usize) {
+        if index >= self.conversations.len() || index == self.active_conversation {
+            return;
+        }
+
+        // Save current state
+        self.conversations[self.active_conversation].messages = self.messages.clone();
+        if let Some(first_user_msg) = self.messages.iter().find(|m| m.sender == "You") {
+            self.conversations[self.active_conversation].preview = first_user_msg.content.clone();
+        }
+
+        // Load target conversation
+        self.active_conversation = index;
+        self.messages = self.conversations[index].messages.clone();
+        self.conversation_id = self.conversations[index].id.clone();
+        self.input.clear();
+        self.cursor_position = 0;
+        self.streaming_thinking.clear();
+        self.streaming_content.clear();
+        self.is_thinking = false;
+        self.agent_state = AgentState::Idle;
+    }
+
+    pub fn next_conversation(&mut self) {
+        if self.active_conversation + 1 < self.conversations.len() {
+            self.switch_conversation(self.active_conversation + 1);
+        }
+    }
+
+    pub fn prev_conversation(&mut self) {
+        if self.active_conversation > 0 {
+            self.switch_conversation(self.active_conversation - 1);
+        }
     }
 
     pub fn insert_char(&mut self, c: char) {

@@ -1,11 +1,12 @@
 use clap::Parser;
-use gclaw_agent::{AgentLoop, ShellExecTool, ToolExecutor};
+use gclaw_agent::tools::{FileReadTool, FileWriteTool, ListDirTool, ShellExecTool, WebFetchTool};
+use gclaw_agent::{AgentLoop, ContainerExecutor, ToolExecutor};
 use gclaw_channels::TuiChannel;
-use gclaw_core::traits::Channel;
+use gclaw_core::traits::{Channel, LlmProvider};
 use gclaw_core::types::{AgentEvent, InboundMessage, OutboundMessage};
 use gclaw_core::workspace::{resolve_workspace_dir, Workspace};
 use gclaw_core::{Config, SqliteMemory};
-use gclaw_providers::OllamaProvider;
+use gclaw_providers::{OllamaProvider, OpenAiProvider};
 use gclaw_tui::app::App;
 use gclaw_tui::event::EventHandler;
 use gclaw_tui::Tui;
@@ -52,15 +53,41 @@ fn main() -> anyhow::Result<()> {
 
     info!("gclaw starting");
 
-    let model = cli
-        .model
-        .unwrap_or_else(|| config.provider.ollama.default_model.clone());
-
     // Build tokio runtime
     let rt = tokio::runtime::Runtime::new()?;
 
-    // Provider
-    let provider = Arc::new(OllamaProvider::new(&config.provider.ollama.url, &model));
+    // Provider selection
+    let (provider, model): (Arc<dyn LlmProvider>, String) = match config.provider.active.as_str() {
+        "openai" => {
+            let api_key = std::env::var("GCLAW_OPENAI_API_KEY")
+                .unwrap_or_else(|_| config.provider.openai.api_key.clone());
+            let m = cli
+                .model
+                .unwrap_or_else(|| config.provider.openai.default_model.clone());
+            info!(
+                "Using OpenAI-compatible provider at {}",
+                config.provider.openai.base_url
+            );
+            (
+                Arc::new(OpenAiProvider::new(
+                    &api_key,
+                    &config.provider.openai.base_url,
+                    &m,
+                )),
+                m,
+            )
+        }
+        _ => {
+            let m = cli
+                .model
+                .unwrap_or_else(|| config.provider.ollama.default_model.clone());
+            info!("Using Ollama provider at {}", config.provider.ollama.url);
+            (
+                Arc::new(OllamaProvider::new(&config.provider.ollama.url, &m)),
+                m,
+            )
+        }
+    };
 
     // Memory
     let db_path = log_dir.join("memory.db");
@@ -69,6 +96,13 @@ fn main() -> anyhow::Result<()> {
     // Tools
     let mut executor = ToolExecutor::new();
     executor.register(Arc::new(ShellExecTool));
+    executor.register(Arc::new(FileReadTool));
+    executor.register(Arc::new(FileWriteTool));
+    executor.register(Arc::new(ListDirTool));
+    executor.register(Arc::new(WebFetchTool::new()));
+
+    // Wrap in container executor if enabled
+    let executor = ContainerExecutor::new(config.container.clone(), executor);
 
     // Load workspace (SOUL.md, IDENTITY.md, AGENTS.md, etc.)
     let workspace_dir = resolve_workspace_dir(config.agent.workspace_dir.as_deref());

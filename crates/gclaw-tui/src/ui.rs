@@ -9,6 +9,21 @@ pub fn render(f: &mut Frame, app: &App) {
         return;
     }
 
+    let main_area = if app.show_sidebar {
+        let horizontal = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([
+                Constraint::Percentage(25), // sidebar
+                Constraint::Percentage(75), // main
+            ])
+            .split(f.area());
+
+        widgets::conversations::render(f, app, horizontal[0]);
+        horizontal[1]
+    } else {
+        f.area()
+    };
+
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -16,7 +31,7 @@ pub fn render(f: &mut Frame, app: &App) {
             Constraint::Length(3), // input
             Constraint::Length(3), // status
         ])
-        .split(f.area());
+        .split(main_area);
 
     widgets::chat::render(f, app, chunks[0]);
     widgets::input::render(f, app, chunks[1]);

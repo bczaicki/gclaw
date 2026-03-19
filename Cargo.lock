@@ -944,6 +944,7 @@ dependencies = [
  "async-trait",
  "futures",
  "gclaw-core",
+ "reqwest 0.12.28",
  "serde_json",
  "tokio",
  "tracing",
@@ -990,6 +991,9 @@ dependencies = [
  "futures",
  "gclaw-core",
  "ollama-rs",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
  "tokio",
  "tokio-stream",
  "tracing",
@@ -1004,6 +1008,7 @@ dependencies = [
  "ratatui",
  "tokio",
  "tracing",
+ "uuid",
 ]
 
 [[package]]

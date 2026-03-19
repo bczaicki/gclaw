@@ -17,6 +17,43 @@ pub struct Config {
 pub struct ProviderConfig {
     #[serde(default)]
     pub ollama: OllamaConfig,
+    #[serde(default)]
+    pub openai: OpenAiConfig,
+    /// Which provider to use: "ollama" or "openai"
+    #[serde(default = "default_active_provider")]
+    pub active: String,
+}
+
+fn default_active_provider() -> String {
+    "ollama".to_string()
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OpenAiConfig {
+    #[serde(default = "default_openai_url")]
+    pub base_url: String,
+    #[serde(default)]
+    pub api_key: String,
+    #[serde(default = "default_openai_model")]
+    pub default_model: String,
+}
+
+fn default_openai_url() -> String {
+    "https://api.openai.com/v1".to_string()
+}
+
+fn default_openai_model() -> String {
+    "gpt-4o-mini".to_string()
+}
+
+impl Default for OpenAiConfig {
+    fn default() -> Self {
+        Self {
+            base_url: default_openai_url(),
+            api_key: String::new(),
+            default_model: default_openai_model(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

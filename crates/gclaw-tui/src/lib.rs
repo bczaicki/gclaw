@@ -55,7 +55,7 @@ impl Tui {
                         } else if app.is_onboarding() {
                             self.handle_onboarding_key(app, key.code, key.modifiers);
                         } else {
-                            self.handle_chat_key(app, key.code, input_tx);
+                            self.handle_chat_key(app, key.code, key.modifiers, input_tx);
                         }
                     }
                     AppEvent::Agent(agent_event) => {
@@ -151,14 +151,44 @@ impl Tui {
         &self,
         app: &mut App,
         code: KeyCode,
+        modifiers: KeyModifiers,
         input_tx: &tokio::sync::mpsc::UnboundedSender<String>,
     ) {
+        let is_ctrl = modifiers.contains(KeyModifiers::CONTROL);
+
+        // Ctrl key bindings for conversation management
+        if is_ctrl {
+            match code {
+                KeyCode::Char('n') => {
+                    app.new_conversation();
+                    return;
+                }
+                KeyCode::Char('b') => {
+                    app.toggle_sidebar();
+                    return;
+                }
+                KeyCode::Up if app.show_sidebar => {
+                    app.prev_conversation();
+                    return;
+                }
+                KeyCode::Down if app.show_sidebar => {
+                    app.next_conversation();
+                    return;
+                }
+                _ => {}
+            }
+        }
+
         match code {
             KeyCode::Esc => {
                 app.should_quit = true;
             }
             KeyCode::Enter => {
-                if let Some(input) = app.submit_input() {
+                if app.show_sidebar && app.input.is_empty() {
+                    // Select the currently highlighted conversation
+                    app.switch_conversation(app.active_conversation);
+                    app.show_sidebar = false;
+                } else if let Some(input) = app.submit_input() {
                     let _ = input_tx.send(input);
                 }
             }

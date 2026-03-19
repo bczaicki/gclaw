@@ -1,5 +1,5 @@
+use crate::container::ContainerExecutor;
 use crate::context::ConversationContext;
-use crate::executor::ToolExecutor;
 use crate::think::ThinkParser;
 use futures::StreamExt;
 use gclaw_core::traits::{LlmProvider, Memory};
@@ -12,7 +12,7 @@ use tracing::debug;
 pub struct AgentLoop {
     provider: Arc<dyn LlmProvider>,
     memory: Arc<dyn Memory>,
-    executor: ToolExecutor,
+    executor: ContainerExecutor,
     model: String,
     max_iterations: usize,
     system_prompt: String,
@@ -22,7 +22,7 @@ impl AgentLoop {
     pub fn new(
         provider: Arc<dyn LlmProvider>,
         memory: Arc<dyn Memory>,
-        executor: ToolExecutor,
+        executor: ContainerExecutor,
         model: String,
         max_iterations: usize,
         system_prompt: String,
@@ -116,7 +116,7 @@ impl AgentLoop {
                 }
 
                 debug!("Executing tool: {} ({})", call.name, call.id);
-                let result = self.executor.execute(call).await?;
+                let result = self.executor.execute(call, Some(conversation_id)).await?;
 
                 if let Some(ref tx) = event_tx {
                     let _ = tx.send(AgentEvent::ToolResult {

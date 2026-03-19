@@ -1,6 +1,14 @@
+[provider]
+active = "ollama"  # "ollama" or "openai"
+
 [provider.ollama]
 url = "http://localhost:11434"
 default_model = "qwen3.5:9b"
+
+[provider.openai]
+base_url = "https://api.openai.com/v1"  # or any OpenAI-compatible endpoint
+api_key = ""  # or set GCLAW_OPENAI_API_KEY env var
+default_model = "gpt-4o-mini"
 
 [agent]
 max_iterations = 10
@@ -29,5 +37,6 @@ webhook_port = 8080
 
 [container]
 enabled = false
-runtime = "docker"
+runtime = "docker"  # or "podman"
 image = "gclaw-sandbox:latest"
+# Build the sandbox image: docker build -t gclaw-sandbox:latest -f Dockerfile.sandbox .
