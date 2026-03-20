@@ -69,8 +69,6 @@ pub fn tools_from_client(client: Arc<McpClient>) -> Vec<Arc<dyn Tool>> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
     fn tool_name_prefixing() {
         // Can't create a real McpClient in unit tests, but we can test the naming logic
