@@ -16,6 +16,18 @@ pub struct ThinkParser {
 const THINK_OPEN: &str = "<think>";
 const THINK_CLOSE: &str = "</think>";
 
+/// Find the largest byte index <= `target` that is a char boundary in `s`.
+fn floor_char_boundary(s: &str, target: usize) -> usize {
+    if target >= s.len() {
+        return s.len();
+    }
+    let mut i = target;
+    while i > 0 && !s.is_char_boundary(i) {
+        i -= 1;
+    }
+    i
+}
+
 impl ThinkParser {
     pub fn new() -> Self {
         Self {
@@ -44,23 +56,24 @@ impl ThinkParser {
                     let _ = tx.send(AgentEvent::ThinkEnd);
                 } else if self.buffer.len() > THINK_CLOSE.len() {
                     // Emit everything except the last few chars that could be
-                    // a partial </think> tag
-                    let safe_len = self.buffer.len() - THINK_CLOSE.len() + 1;
-                    let safe = self.buffer[..safe_len].to_string();
-                    if !safe.is_empty() {
-                        self.think_accum.push_str(&safe);
-                        let _ = tx.send(AgentEvent::ThinkDelta(safe));
+                    // a partial </think> tag. Floor to a char boundary to avoid
+                    // splitting multi-byte characters.
+                    let raw = self.buffer.len() - THINK_CLOSE.len() + 1;
+                    let safe_len = floor_char_boundary(&self.buffer, raw);
+                    if safe_len == 0 {
+                        break;
                     }
+                    let safe = self.buffer[..safe_len].to_string();
+                    self.think_accum.push_str(&safe);
+                    let _ = tx.send(AgentEvent::ThinkDelta(safe));
                     self.buffer = self.buffer[safe_len..].to_string();
                     break;
                 } else {
-                    // Buffer too short to tell, wait for more
                     break;
                 }
             } else {
                 // Look for <think>
                 if let Some(pos) = self.buffer.find(THINK_OPEN) {
-                    // Emit content before the tag
                     let before = self.buffer[..pos].to_string();
                     if !before.is_empty() {
                         self.content_accum.push_str(&before);
@@ -70,13 +83,15 @@ impl ThinkParser {
                     self.in_think = true;
                     let _ = tx.send(AgentEvent::ThinkStart);
                 } else if self.buffer.len() > THINK_OPEN.len() {
-                    // Emit safe content
-                    let safe_len = self.buffer.len() - THINK_OPEN.len() + 1;
-                    let safe = self.buffer[..safe_len].to_string();
-                    if !safe.is_empty() {
-                        self.content_accum.push_str(&safe);
-                        let _ = tx.send(AgentEvent::StreamDelta(safe));
+                    // Emit safe content, floored to a char boundary.
+                    let raw = self.buffer.len() - THINK_OPEN.len() + 1;
+                    let safe_len = floor_char_boundary(&self.buffer, raw);
+                    if safe_len == 0 {
+                        break;
                     }
+                    let safe = self.buffer[..safe_len].to_string();
+                    self.content_accum.push_str(&safe);
+                    let _ = tx.send(AgentEvent::StreamDelta(safe));
                     self.buffer = self.buffer[safe_len..].to_string();
                     break;
                 } else {

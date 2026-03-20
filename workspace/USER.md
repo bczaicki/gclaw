@@ -1,13 +1,13 @@
 # USER
 
-- **Name:** B
-- **Pronouns:** he/him
+- **Name:** Brian
+- **Pronouns:** he
 - **Timezone:** pst
 
 ## Current Projects
 
-- Local first claws
+- Phillips Connect Horizon 1
 
 ## Preferences
 
-- **Communication:** terse
+- **Communication:** cautious & efficient
