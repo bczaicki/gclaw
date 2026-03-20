@@ -6,7 +6,7 @@ use gclaw_core::traits::{Channel, LlmProvider};
 use gclaw_core::types::{AgentEvent, InboundMessage, OutboundMessage};
 use gclaw_core::workspace::{resolve_workspace_dir, Workspace};
 use gclaw_core::{Config, SqliteMemory};
-use gclaw_providers::{OllamaProvider, OpenAiProvider};
+use gclaw_providers::{AnthropicProvider, OllamaProvider, OpenAiProvider};
 use gclaw_tui::app::App;
 use gclaw_tui::event::EventHandler;
 use gclaw_tui::Tui;
@@ -74,6 +74,24 @@ fn main() -> anyhow::Result<()> {
                     &config.provider.openai.base_url,
                     &m,
                 )),
+                m,
+            )
+        }
+        "anthropic" => {
+            let api_key = std::env::var("ANTHROPIC_API_KEY")
+                .unwrap_or_else(|_| config.provider.anthropic.api_key.clone());
+            let m = cli
+                .model
+                .unwrap_or_else(|| config.provider.anthropic.default_model.clone());
+            info!(
+                "Using Anthropic provider at {}",
+                config.provider.anthropic.base_url
+            );
+            (
+                Arc::new(
+                    AnthropicProvider::new(&api_key, &config.provider.anthropic.base_url, &m)
+                        .with_max_tokens(config.provider.anthropic.max_tokens),
+                ),
                 m,
             )
         }

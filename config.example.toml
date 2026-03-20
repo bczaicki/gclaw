@@ -1,5 +1,5 @@
 [provider]
-active = "ollama"  # "ollama" or "openai"
+active = "ollama"  # "ollama", "openai", or "anthropic"
 
 [provider.ollama]
 url = "http://localhost:11434"
@@ -9,6 +9,12 @@ default_model = "qwen3.5:9b"
 base_url = "https://api.openai.com/v1"  # or any OpenAI-compatible endpoint
 api_key = ""  # or set GCLAW_OPENAI_API_KEY env var
 default_model = "gpt-4o-mini"
+
+[provider.anthropic]
+base_url = "https://api.anthropic.com"
+api_key = ""  # or set ANTHROPIC_API_KEY env var
+default_model = "claude-sonnet-4-20250514"
+max_tokens = 8192
 
 [agent]
 max_iterations = 10

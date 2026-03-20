@@ -19,7 +19,9 @@ pub struct ProviderConfig {
     pub ollama: OllamaConfig,
     #[serde(default)]
     pub openai: OpenAiConfig,
-    /// Which provider to use: "ollama" or "openai"
+    #[serde(default)]
+    pub anthropic: AnthropicConfig,
+    /// Which provider to use: "ollama", "openai", or "anthropic"
     #[serde(default = "default_active_provider")]
     pub active: String,
 }
@@ -29,6 +31,7 @@ impl Default for ProviderConfig {
         Self {
             ollama: OllamaConfig::default(),
             openai: OpenAiConfig::default(),
+            anthropic: AnthropicConfig::default(),
             active: default_active_provider(),
         }
     }
@@ -62,6 +65,41 @@ impl Default for OpenAiConfig {
             base_url: default_openai_url(),
             api_key: String::new(),
             default_model: default_openai_model(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AnthropicConfig {
+    #[serde(default = "default_anthropic_url")]
+    pub base_url: String,
+    #[serde(default)]
+    pub api_key: String,
+    #[serde(default = "default_anthropic_model")]
+    pub default_model: String,
+    #[serde(default = "default_anthropic_max_tokens")]
+    pub max_tokens: u32,
+}
+
+fn default_anthropic_url() -> String {
+    "https://api.anthropic.com".to_string()
+}
+
+fn default_anthropic_model() -> String {
+    "claude-sonnet-4-20250514".to_string()
+}
+
+fn default_anthropic_max_tokens() -> u32 {
+    8192
+}
+
+impl Default for AnthropicConfig {
+    fn default() -> Self {
+        Self {
+            base_url: default_anthropic_url(),
+            api_key: String::new(),
+            default_model: default_anthropic_model(),
+            max_tokens: default_anthropic_max_tokens(),
         }
     }
 }
