@@ -257,6 +257,7 @@ async fn handle_incoming(
                     conversation_id: format!("whatsapp-{}", message.from),
                     sender: message.from.clone(),
                     content: text.clone(),
+                    skill_context: None,
                 };
 
                 debug!(from = %message.from, "Received WhatsApp message");

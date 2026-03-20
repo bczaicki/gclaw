@@ -73,7 +73,9 @@ async fn agent_loop_end_to_end() {
         "You are a helpful assistant. Be very brief.".to_string(),
     );
 
-    let response = agent.process("test-convo", "What is 2+2?", None).await;
+    let response = agent
+        .process("test-convo", "What is 2+2?", None, None)
+        .await;
     assert!(response.is_ok());
     let text = response.unwrap();
     assert!(text.contains('4'), "Expected '4' in response: {text}");
@@ -99,7 +101,7 @@ async fn agent_loop_with_streaming() {
 
     let (tx, mut rx) = mpsc::unbounded_channel();
     let response = agent
-        .process("test-stream", "Say the word 'hello'", Some(tx))
+        .process("test-stream", "Say the word 'hello'", Some(tx), None)
         .await;
 
     assert!(response.is_ok());
@@ -137,7 +139,7 @@ async fn memory_persists_across_calls() {
 
     // First message
     let _ = agent
-        .process("persist-test", "My name is TestUser", None)
+        .process("persist-test", "My name is TestUser", None, None)
         .await
         .unwrap();
 

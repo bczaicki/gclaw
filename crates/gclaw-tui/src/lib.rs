@@ -39,7 +39,7 @@ impl Tui {
         &mut self,
         app: &mut App,
         events: &mut EventHandler,
-        input_tx: &tokio::sync::mpsc::UnboundedSender<String>,
+        input_tx: &tokio::sync::mpsc::UnboundedSender<app::SubmitResult>,
     ) -> io::Result<()> {
         loop {
             self.terminal.draw(|f| ui::render(f, app))?;
@@ -152,7 +152,7 @@ impl Tui {
         app: &mut App,
         code: KeyCode,
         modifiers: KeyModifiers,
-        input_tx: &tokio::sync::mpsc::UnboundedSender<String>,
+        input_tx: &tokio::sync::mpsc::UnboundedSender<app::SubmitResult>,
     ) {
         let is_ctrl = modifiers.contains(KeyModifiers::CONTROL);
 
@@ -188,8 +188,14 @@ impl Tui {
                     // Select the currently highlighted conversation
                     app.switch_conversation(app.active_conversation);
                     app.show_sidebar = false;
-                } else if let Some(input) = app.submit_input() {
-                    let _ = input_tx.send(input);
+                } else {
+                    let result = app.submit_input();
+                    match &result {
+                        app::SubmitResult::None => {}
+                        _ => {
+                            let _ = input_tx.send(result);
+                        }
+                    }
                 }
             }
             KeyCode::Backspace => app.delete_char(),

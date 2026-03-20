@@ -1,13 +1,13 @@
 # USER
 
-- **Name:** Brian
-- **Pronouns:** he
-- **Timezone:** pst
+- **Name:** B
+- **Pronouns:** He/him
+- **Timezone:** PST
 
 ## Current Projects
 
-- Phillips Connect Horizon 1
+- gclaw
 
 ## Preferences
 
-- **Communication:** cautious & efficient
+- **Communication:** Casual

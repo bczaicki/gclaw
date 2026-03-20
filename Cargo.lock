@@ -930,6 +930,7 @@ dependencies = [
  "gclaw-agent",
  "gclaw-channels",
  "gclaw-core",
+ "gclaw-mcp",
  "gclaw-providers",
  "gclaw-tui",
  "reqwest 0.12.28",
@@ -943,6 +944,7 @@ name = "gclaw-agent"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "dirs",
  "futures",
  "gclaw-core",
  "reqwest 0.12.28",
@@ -987,6 +989,18 @@ dependencies = [
  "toml",
  "tracing",
  "url",
+]
+
+[[package]]
+name = "gclaw-mcp"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "gclaw-core",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]

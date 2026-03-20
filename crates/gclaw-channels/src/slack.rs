@@ -213,6 +213,7 @@ impl Channel for SlackChannel {
                             conversation_id: format!("slack-{}", channel.id),
                             sender,
                             content: msg.text.clone(),
+                            skill_context: None,
                         };
 
                         if let Err(e) = tx.send(inbound).await {

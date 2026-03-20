@@ -75,7 +75,7 @@ fn render_welcome(f: &mut Frame, state: &OnboardingState, area: Rect) {
         lines.push(Line::from(Span::styled(
             *logo_line,
             Style::default()
-                .fg(Color::Cyan)
+                .fg(Color::Green)
                 .add_modifier(Modifier::BOLD),
         )));
     }
@@ -129,7 +129,7 @@ fn render_progress(step: &OnboardingStep) -> Line<'static> {
             Span::styled(
                 " ◉ ",
                 Style::default()
-                    .fg(Color::Cyan)
+                    .fg(Color::LightGreen)
                     .add_modifier(Modifier::BOLD),
             )
         } else {
@@ -171,7 +171,7 @@ fn render_input_step(f: &mut Frame, state: &OnboardingState, area: Rect) {
         Span::styled(
             format!("  Step {step_num}"),
             Style::default()
-                .fg(Color::Cyan)
+                .fg(Color::Green)
                 .add_modifier(Modifier::BOLD),
         ),
         Span::styled(
@@ -196,7 +196,7 @@ fn render_input_step(f: &mut Frame, state: &OnboardingState, area: Rect) {
         .block(
             Block::default()
                 .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::Cyan))
+                .border_style(Style::default().fg(Color::Green))
                 .padding(Padding::horizontal(1)),
         );
     f.render_widget(input, layout[6]);
@@ -240,7 +240,7 @@ fn render_confirm(f: &mut Frame, state: &OnboardingState, area: Rect) {
         Line::from(Span::styled(
             "  All set. Here's what I've got:",
             Style::default()
-                .fg(Color::Cyan)
+                .fg(Color::Green)
                 .add_modifier(Modifier::BOLD),
         )),
         Line::from(""),
@@ -322,7 +322,7 @@ fn render_writing(f: &mut Frame, state: &OnboardingState, area: Rect) {
         Line::from(Span::styled(
             format!("  {spinner} Writing workspace files..."),
             Style::default()
-                .fg(Color::Cyan)
+                .fg(Color::Green)
                 .add_modifier(Modifier::BOLD),
         )),
         Line::from(""),

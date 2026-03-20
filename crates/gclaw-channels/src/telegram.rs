@@ -73,6 +73,7 @@ impl Channel for TelegramChannel {
                     conversation_id: conv_id,
                     sender,
                     content: text,
+                    skill_context: None,
                 };
 
                 if let Err(e) = tx.send(inbound).await {

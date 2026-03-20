@@ -5,6 +5,7 @@ members = [
     "crates/gclaw-providers",
     "crates/gclaw-channels",
     "crates/gclaw-tui",
+    "crates/gclaw-mcp",
 ]
 resolver = "2"
 
@@ -21,6 +22,7 @@ gclaw-agent = { path = "crates/gclaw-agent" }
 gclaw-providers = { path = "crates/gclaw-providers" }
 gclaw-channels = { path = "crates/gclaw-channels", features = ["all-channels"] }
 gclaw-tui = { path = "crates/gclaw-tui" }
+gclaw-mcp = { path = "crates/gclaw-mcp" }
 tokio = { version = "1", features = ["full"] }
 clap = { version = "4", features = ["derive"] }
 tracing = "0.1"

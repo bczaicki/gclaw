@@ -20,7 +20,7 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
             }
             _ => {
                 let (color, label) = match msg.sender.as_str() {
-                    "You" => (Color::Cyan, "You"),
+                    "You" => (Color::Green, "You"),
                     "Assistant" => (Color::Green, "Assistant"),
                     "Tool" => (Color::Yellow, "Tool"),
                     "Error" => (Color::Red, "Error"),

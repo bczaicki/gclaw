@@ -14,7 +14,7 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
         .map(|(i, conv)| {
             let style = if i == app.active_conversation {
                 Style::default()
-                    .fg(Color::Cyan)
+                    .fg(Color::Green)
                     .add_modifier(Modifier::BOLD)
             } else {
                 Style::default().fg(Color::Gray)
@@ -41,7 +41,7 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
         )
         .highlight_style(
             Style::default()
-                .fg(Color::Cyan)
+                .fg(Color::Green)
                 .add_modifier(Modifier::BOLD),
         );
 

@@ -2,6 +2,17 @@ use crate::onboarding::OnboardingState;
 use gclaw_core::AgentEvent;
 use std::path::PathBuf;
 
+/// Result of submitting user input.
+#[derive(Debug, Clone)]
+pub enum SubmitResult {
+    /// No action needed (empty input or handled locally).
+    None,
+    /// Normal message to send to the agent.
+    Message(String),
+    /// Skill invocation: `/skill-name args`.
+    SkillInvocation { name: String, args: String },
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Mode {
     Normal,
@@ -47,6 +58,8 @@ pub struct App {
     pub thinking_collapsed: bool,
     pub onboarding: Option<OnboardingState>,
     pub startup_warnings: Vec<String>,
+    /// Known skill names for slash-command dispatch.
+    pub skill_names: Vec<String>,
 }
 
 impl App {
@@ -74,7 +87,13 @@ impl App {
             thinking_collapsed: false,
             onboarding: None,
             startup_warnings: Vec::new(),
+            skill_names: Vec::new(),
         }
+    }
+
+    pub fn with_skill_names(mut self, names: Vec<String>) -> Self {
+        self.skill_names = names;
+        self
     }
 
     pub fn with_startup_warnings(mut self, warnings: Vec<String>) -> Self {
@@ -98,11 +117,10 @@ impl App {
         self.onboarding.is_some()
     }
 
-    /// Returns `Some(input)` if the message should be sent to the agent,
-    /// or `None` if it was a local command that was handled in-place.
-    pub fn submit_input(&mut self) -> Option<String> {
+    /// Returns a `SubmitResult` indicating what to do with the input.
+    pub fn submit_input(&mut self) -> SubmitResult {
         if self.input.trim().is_empty() {
-            return None;
+            return SubmitResult::None;
         }
         let input = self.input.clone();
 
@@ -123,7 +141,51 @@ impl App {
                     content: format!("Switched to model: {model_arg}"),
                 });
             }
-            return None;
+            return SubmitResult::None;
+        }
+
+        // Handle /skills command
+        if input.trim() == "/skills" {
+            self.input.clear();
+            self.cursor_position = 0;
+            if self.skill_names.is_empty() {
+                self.messages.push(ChatMessage {
+                    sender: "System".to_string(),
+                    content: "No skills available.".to_string(),
+                });
+            } else {
+                let list = self.skill_names.join(", ");
+                self.messages.push(ChatMessage {
+                    sender: "System".to_string(),
+                    content: format!("Available skills: {list}"),
+                });
+            }
+            return SubmitResult::None;
+        }
+
+        // Check for skill invocation: /skill-name args
+        if let Some(without_slash) = input.strip_prefix('/') {
+            let (cmd, args) = match without_slash.split_once(char::is_whitespace) {
+                Some((c, a)) => (c, a.to_string()),
+                None => (without_slash, String::new()),
+            };
+            if self.skill_names.iter().any(|s| s == cmd) {
+                self.messages.push(ChatMessage {
+                    sender: "You".to_string(),
+                    content: input.clone(),
+                });
+                self.input.clear();
+                self.cursor_position = 0;
+                self.streaming_thinking.clear();
+                self.streaming_content.clear();
+                self.is_thinking = false;
+                self.thinking_collapsed = false;
+                self.agent_state = AgentState::Thinking;
+                return SubmitResult::SkillInvocation {
+                    name: cmd.to_string(),
+                    args,
+                };
+            }
         }
 
         self.messages.push(ChatMessage {
@@ -137,7 +199,7 @@ impl App {
         self.is_thinking = false;
         self.thinking_collapsed = false;
         self.agent_state = AgentState::Thinking;
-        Some(input)
+        SubmitResult::Message(input)
     }
 
     pub fn handle_agent_event(&mut self, event: AgentEvent) {

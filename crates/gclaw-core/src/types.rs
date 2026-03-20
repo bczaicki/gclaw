@@ -75,6 +75,8 @@ pub struct InboundMessage {
     pub conversation_id: String,
     pub sender: String,
     pub content: String,
+    /// When set, injected as a system message for skill invocations.
+    pub skill_context: Option<String>,
 }
 
 #[derive(Debug, Clone)]

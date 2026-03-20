@@ -43,6 +43,7 @@ impl Channel for TuiChannel {
                     conversation_id: conversation_id.clone(),
                     sender: "user".to_string(),
                     content,
+                    skill_context: None,
                 };
                 if tx.send(msg).await.is_err() {
                     break;

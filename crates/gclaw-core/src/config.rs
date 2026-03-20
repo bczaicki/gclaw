@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::path::PathBuf;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -13,6 +14,29 @@ pub struct Config {
     pub container: ContainerConfig,
     #[serde(default)]
     pub routing: RoutingConfig,
+    #[serde(default)]
+    pub mcp_servers: HashMap<String, McpServerConfig>,
+}
+
+/// Configuration for an external MCP server (stdio transport).
+///
+/// ```toml
+/// [mcp_servers.filesystem]
+/// command = "npx"
+/// args = ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"]
+///
+/// [mcp_servers.github]
+/// command = "gh"
+/// args = ["mcp"]
+/// env = { GITHUB_TOKEN = "${env:GITHUB_TOKEN}" }
+/// ```
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct McpServerConfig {
+    pub command: String,
+    #[serde(default)]
+    pub args: Vec<String>,
+    #[serde(default)]
+    pub env: HashMap<String, String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

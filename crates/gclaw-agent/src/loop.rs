@@ -121,8 +121,14 @@ impl AgentLoop {
         conversation_id: &str,
         user_input: &str,
         event_tx: Option<mpsc::UnboundedSender<AgentEvent>>,
+        skill_context: Option<&str>,
     ) -> Result<String> {
-        let mut ctx = ConversationContext::new(self.system_prompt.clone());
+        let system = if let Some(ctx_str) = skill_context {
+            format!("{}\n\n{}", self.system_prompt, ctx_str)
+        } else {
+            self.system_prompt.clone()
+        };
+        let mut ctx = ConversationContext::new(system);
         ctx.set_tools(self.executor.definitions());
 
         // Load history and compress if needed

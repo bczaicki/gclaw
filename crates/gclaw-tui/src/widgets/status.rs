@@ -35,7 +35,7 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
         Span::styled(
             format!(" {} ", app.model_name),
             Style::default()
-                .fg(Color::Cyan)
+                .fg(Color::Green)
                 .add_modifier(Modifier::BOLD),
         ),
         Span::raw("│ "),

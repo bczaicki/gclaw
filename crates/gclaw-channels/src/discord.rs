@@ -52,6 +52,7 @@ impl EventHandler for Handler {
             conversation_id,
             sender: msg.author.name.clone(),
             content: msg.content.clone(),
+            skill_context: None,
         };
 
         if let Err(e) = self.tx.send(inbound).await {

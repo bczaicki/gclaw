@@ -4,6 +4,7 @@ pub mod executor;
 pub mod r#loop;
 pub mod plugins;
 pub mod router;
+pub mod skills;
 pub mod think;
 pub mod tools;
 
@@ -12,4 +13,5 @@ pub use executor::ToolExecutor;
 pub use plugins::load_plugins;
 pub use r#loop::AgentLoop;
 pub use router::{ModelRouter, Route};
+pub use skills::SkillRegistry;
 pub use tools::ShellExecTool;
