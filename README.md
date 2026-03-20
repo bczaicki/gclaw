@@ -1,4 +1,6 @@
 # gclaw
+<img width="2048" height="2048" alt="Gemini_Generated_Image_yj80igyj80igyj80" src="https://github.com/user-attachments/assets/019e880a-0a16-43d5-b174-f9ab240d1e5a" />
+
 
 A local-first AI agent gateway that runs tool calls in containers for security. Chat with LLMs through a TUI, or connect WhatsApp, Telegram, Slack, and Discord -- all from your own machine.
 
