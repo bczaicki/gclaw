@@ -38,6 +38,20 @@ After installing, verify everything looks good:
 gclaw doctor
 ```
 
+### Update
+
+Re-run the same install command — it always grabs the latest release:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/bczaicki/gclaw/main/install.sh | bash
+```
+
+Or pin a version:
+
+```bash
+GCLAW_VERSION=v0.1.1 curl -fsSL https://raw.githubusercontent.com/bczaicki/gclaw/main/install.sh | bash
+```
+
 ### Build from source
 
 You need Rust and either [Ollama](https://ollama.com) running locally or an API key for OpenAI / Anthropic.
