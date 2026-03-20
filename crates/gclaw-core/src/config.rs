@@ -13,7 +13,7 @@ pub struct Config {
     pub container: ContainerConfig,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProviderConfig {
     #[serde(default)]
     pub ollama: OllamaConfig,
@@ -22,6 +22,16 @@ pub struct ProviderConfig {
     /// Which provider to use: "ollama" or "openai"
     #[serde(default = "default_active_provider")]
     pub active: String,
+}
+
+impl Default for ProviderConfig {
+    fn default() -> Self {
+        Self {
+            ollama: OllamaConfig::default(),
+            openai: OpenAiConfig::default(),
+            active: default_active_provider(),
+        }
+    }
 }
 
 fn default_active_provider() -> String {
@@ -224,6 +234,17 @@ impl Config {
         }
     }
 
+    pub fn load_from_path(path: &std::path::Path) -> crate::Result<Self> {
+        if path.exists() {
+            let content = std::fs::read_to_string(path)
+                .map_err(|e| crate::GclawError::Config(format!("Failed to read config: {e}")))?;
+            toml::from_str(&content)
+                .map_err(|e| crate::GclawError::Config(format!("Failed to parse config: {e}")))
+        } else {
+            Ok(Config::default())
+        }
+    }
+
     pub fn config_path() -> PathBuf {
         if let Ok(path) = std::env::var("GCLAW_CONFIG") {
             return PathBuf::from(path);
@@ -232,5 +253,64 @@ impl Config {
             .unwrap_or_else(|| PathBuf::from("."))
             .join("gclaw")
             .join("config.toml")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+
+    #[test]
+    fn load_from_toml_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        std::fs::write(
+            &path,
+            r#"
+[agent]
+max_iterations = 42
+system_prompt = "Be concise."
+"#,
+        )
+        .unwrap();
+
+        let cfg = Config::load_from_path(&path).unwrap();
+        assert_eq!(cfg.agent.max_iterations, 42);
+        assert_eq!(cfg.agent.system_prompt, "Be concise.");
+    }
+
+    #[test]
+    fn defaults_when_file_missing() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("does_not_exist.toml");
+        let cfg = Config::load_from_path(&path).unwrap();
+
+        let defaults = Config::default();
+        assert_eq!(cfg.agent.max_iterations, defaults.agent.max_iterations);
+        assert_eq!(cfg.provider.active, defaults.provider.active);
+        assert_eq!(cfg.container.runtime, defaults.container.runtime);
+    }
+
+    #[test]
+    fn default_config_values() {
+        let cfg = Config::default();
+        assert_eq!(cfg.provider.ollama.url, "http://localhost:11434");
+        assert_eq!(cfg.provider.ollama.default_model, "qwen3.5:9b");
+        assert_eq!(cfg.agent.system_prompt, "You are a helpful assistant.");
+        assert!(!cfg.container.enabled);
+        assert_eq!(cfg.provider.active, "ollama");
+    }
+
+    #[test]
+    fn partial_toml_fills_defaults() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        std::fs::write(&path, "[container]\nenabled = true\n").unwrap();
+
+        let cfg = Config::load_from_path(&path).unwrap();
+        assert!(cfg.container.enabled);
+        assert_eq!(cfg.container.runtime, "docker");
+        assert_eq!(cfg.agent.max_iterations, 10);
     }
 }

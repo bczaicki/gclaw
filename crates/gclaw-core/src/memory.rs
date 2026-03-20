@@ -145,3 +145,87 @@ impl Memory for SqliteMemory {
         Ok(messages)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_msg(role: Role, content: &str) -> Message {
+        Message {
+            role,
+            content: content.to_string(),
+            tool_calls: vec![],
+            tool_call_id: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn store_and_retrieve() {
+        let mem = SqliteMemory::in_memory().unwrap();
+        let msgs = vec![
+            make_msg(Role::User, "hello"),
+            make_msg(Role::Assistant, "hi there"),
+        ];
+        mem.store("convo1", &msgs).await.unwrap();
+
+        let retrieved = mem.retrieve("convo1", 10).await.unwrap();
+        assert_eq!(retrieved.len(), 2);
+        assert_eq!(retrieved[0].content, "hello");
+        assert_eq!(retrieved[0].role, Role::User);
+        assert_eq!(retrieved[1].content, "hi there");
+        assert_eq!(retrieved[1].role, Role::Assistant);
+    }
+
+    #[tokio::test]
+    async fn retrieve_empty_conversation() {
+        let mem = SqliteMemory::in_memory().unwrap();
+        let retrieved = mem.retrieve("nonexistent", 10).await.unwrap();
+        assert!(retrieved.is_empty());
+    }
+
+    #[tokio::test]
+    async fn search_finds_matching_messages() {
+        let mem = SqliteMemory::in_memory().unwrap();
+        mem.store(
+            "c1",
+            &[
+                make_msg(Role::User, "tell me about zebras"),
+                make_msg(Role::Assistant, "they have stripes"),
+                make_msg(Role::User, "what about python"),
+            ],
+        )
+        .await
+        .unwrap();
+
+        let results = mem.search("zebra", 10).await.unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].content, "tell me about zebras");
+    }
+
+    #[tokio::test]
+    async fn retrieve_respects_limit() {
+        let mem = SqliteMemory::in_memory().unwrap();
+        let msgs: Vec<Message> = (0..5)
+            .map(|i| make_msg(Role::User, &format!("msg {i}")))
+            .collect();
+        mem.store("c1", &msgs).await.unwrap();
+
+        let retrieved = mem.retrieve("c1", 3).await.unwrap();
+        assert_eq!(retrieved.len(), 3);
+    }
+
+    #[tokio::test]
+    async fn retrieve_ordering_is_chronological() {
+        let mem = SqliteMemory::in_memory().unwrap();
+        mem.store("c1", &[make_msg(Role::User, "first")])
+            .await
+            .unwrap();
+        mem.store("c1", &[make_msg(Role::User, "second")])
+            .await
+            .unwrap();
+
+        let retrieved = mem.retrieve("c1", 10).await.unwrap();
+        assert_eq!(retrieved[0].content, "first");
+        assert_eq!(retrieved[1].content, "second");
+    }
+}

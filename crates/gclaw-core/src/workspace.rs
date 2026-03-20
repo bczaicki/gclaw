@@ -160,3 +160,61 @@ pub fn resolve_workspace_dir(config_path: Option<&str>) -> PathBuf {
         .join("gclaw")
         .join("workspace")
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn load_workspace_with_files() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("SOUL.md"), "I am kind and helpful.").unwrap();
+        std::fs::write(dir.path().join("IDENTITY.md"), "My name is Claw.").unwrap();
+
+        let ws = Workspace::load(dir.path());
+        assert!(ws.is_loaded());
+        let prompt = ws.to_system_prompt();
+        assert!(prompt.contains("I am kind and helpful."));
+        assert!(prompt.contains("My name is Claw."));
+        assert!(prompt.contains("--- Identity ---"));
+        assert!(prompt.contains("--- Soul ---"));
+    }
+
+    #[test]
+    fn empty_dir_returns_unloaded_workspace() {
+        let dir = tempfile::tempdir().unwrap();
+        let ws = Workspace::load(dir.path());
+        assert!(!ws.is_loaded());
+        assert!(ws.to_system_prompt().is_empty());
+    }
+
+    #[test]
+    fn build_system_prompt_uses_fallback_when_empty() {
+        let dir = tempfile::tempdir().unwrap();
+        let ws = Workspace::load(dir.path());
+        let prompt = ws.build_system_prompt("fallback prompt");
+        assert_eq!(prompt, "fallback prompt");
+    }
+
+    #[test]
+    fn build_system_prompt_uses_workspace_when_loaded() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("SOUL.md"), "Be brave.").unwrap();
+
+        let ws = Workspace::load(dir.path());
+        let prompt = ws.build_system_prompt("fallback");
+        assert!(prompt.contains("Be brave."));
+        assert!(!prompt.contains("fallback"));
+    }
+
+    #[test]
+    fn bootstrap_file_is_loaded() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("BOOTSTRAP.md"), "Welcome! Let's set up.").unwrap();
+
+        let ws = Workspace::load(dir.path());
+        assert!(ws.bootstrap.is_some());
+        let prompt = ws.to_system_prompt();
+        assert!(prompt.contains("Welcome! Let's set up."));
+    }
+}
