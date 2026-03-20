@@ -16,17 +16,35 @@ Think of it as a self-hosted alternative to OpenClaw. Your data stays local. You
 
 ## Quick start
 
+### Install (prebuilt binary)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/bczaicki/gclaw/main/install.sh | bash
+```
+
+This downloads the latest release for your platform (Linux/macOS, x86_64/ARM) and puts it in `~/.local/bin`. You can control the install with env vars:
+
+```bash
+# Specific version
+GCLAW_VERSION=v0.1.0 curl -fsSL https://raw.githubusercontent.com/bczaicki/gclaw/main/install.sh | bash
+
+# Custom install directory
+GCLAW_INSTALL=/usr/local/bin curl -fsSL https://raw.githubusercontent.com/bczaicki/gclaw/main/install.sh | bash
+```
+
+After installing, verify everything looks good:
+
+```bash
+gclaw doctor
+```
+
+### Build from source
+
 You need Rust and either [Ollama](https://ollama.com) running locally or an API key for OpenAI / Anthropic.
 
 ```bash
 git clone https://github.com/bczaicki/gclaw.git
 cd gclaw
-
-# Copy and edit the config
-cp config.example.toml config.toml
-# At minimum: pick a provider and model
-
-# Run
 cargo run --release
 ```
 
@@ -169,7 +187,11 @@ Models that emit `<think>` blocks (Qwen, DeepSeek, Claude with extended thinking
 ## CLI
 
 ```
-gclaw [OPTIONS]
+gclaw [OPTIONS] [COMMAND]
+
+Commands:
+  doctor    Check the health of your gclaw installation
+  reset     Start from scratch (delete memory, logs, optionally config)
 
 Options:
   -c, --config <PATH>   Path to config file
@@ -179,17 +201,22 @@ Options:
   -V, --version         Print version
 ```
 
+`gclaw doctor` checks config, data files, provider connectivity, container runtime, channels, MCP servers, workspace, skills, and plugins -- then prints a summary.
+
+`gclaw reset` deletes the memory database and log file so you can start clean. Pass `--include-config` to also remove the config file.
+
 ## Architecture
 
-Five Rust crates in a Cargo workspace:
+Six Rust crates in a Cargo workspace:
 
 | Crate | Role |
 |-------|------|
 | `gclaw-core` | Traits, types, config, SQLite memory, workspace loader |
-| `gclaw-agent` | ReAct agent loop, tool executor, container executor, think parser |
+| `gclaw-agent` | ReAct agent loop, tool executor, container executor, think parser, skills |
 | `gclaw-providers` | Ollama, OpenAI, Anthropic LLM providers |
 | `gclaw-channels` | Telegram, Discord, Slack, WhatsApp, TUI channel adapters |
 | `gclaw-tui` | Terminal UI (ratatui), onboarding wizard, conversation management |
+| `gclaw-mcp` | MCP client (stdio transport) for connecting external tool servers |
 
 ```
   Telegram ──┐
@@ -203,7 +230,7 @@ Five Rust crates in a Cargo workspace:
 
 ```bash
 cargo build          # build
-cargo test           # 37 unit tests
+cargo test           # 90 unit tests
 cargo test --test integration -- --ignored  # 5 integration tests (needs Ollama)
 cargo clippy         # lint
 cargo fmt --check    # format check
