@@ -144,6 +144,40 @@ impl Memory for SqliteMemory {
         }
         Ok(messages)
     }
+
+    async fn list_conversations(&self, limit: usize) -> Result<Vec<String>> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| GclawError::Memory(e.to_string()))?;
+        let mut stmt = conn.prepare(
+            "SELECT DISTINCT conversation_id FROM messages
+             GROUP BY conversation_id
+             ORDER BY MAX(created_at) DESC
+             LIMIT ?1",
+        )?;
+        let rows = stmt.query_map(rusqlite::params![limit], |row| {
+            let id: String = row.get(0)?;
+            Ok(id)
+        })?;
+        let mut ids = Vec::new();
+        for row in rows {
+            ids.push(row?);
+        }
+        Ok(ids)
+    }
+
+    async fn delete_conversation(&self, conversation_id: &str) -> Result<()> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| GclawError::Memory(e.to_string()))?;
+        conn.execute(
+            "DELETE FROM messages WHERE conversation_id = ?1",
+            rusqlite::params![conversation_id],
+        )?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -212,6 +246,34 @@ mod tests {
 
         let retrieved = mem.retrieve("c1", 3).await.unwrap();
         assert_eq!(retrieved.len(), 3);
+    }
+
+    #[tokio::test]
+    async fn list_conversations() {
+        let mem = SqliteMemory::in_memory().unwrap();
+        mem.store("convo1", &[make_msg(Role::User, "hello")])
+            .await
+            .unwrap();
+        mem.store("convo2", &[make_msg(Role::User, "world")])
+            .await
+            .unwrap();
+
+        let convos = mem.list_conversations(10).await.unwrap();
+        assert_eq!(convos.len(), 2);
+        // Both conversations should be listed (order may vary within same timestamp)
+        assert!(convos.contains(&"convo1".to_string()));
+        assert!(convos.contains(&"convo2".to_string()));
+    }
+
+    #[tokio::test]
+    async fn delete_conversation() {
+        let mem = SqliteMemory::in_memory().unwrap();
+        mem.store("convo1", &[make_msg(Role::User, "hello")])
+            .await
+            .unwrap();
+        mem.delete_conversation("convo1").await.unwrap();
+        let retrieved = mem.retrieve("convo1", 10).await.unwrap();
+        assert!(retrieved.is_empty());
     }
 
     #[tokio::test]

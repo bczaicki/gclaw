@@ -429,9 +429,24 @@ impl LlmProvider for AnthropicProvider {
 
         let byte_stream = resp.bytes_stream();
 
+        // State: (byte_stream, buffer, in_thinking, active_tool_id, active_tool_name, active_tool_index)
         let stream = futures::stream::unfold(
-            (byte_stream, String::new(), false),
-            |(mut byte_stream, mut buffer, mut in_thinking)| async move {
+            (
+                byte_stream,
+                String::new(),
+                false,
+                String::new(),
+                String::new(),
+                0usize,
+            ),
+            |(
+                mut byte_stream,
+                mut buffer,
+                mut in_thinking,
+                mut tool_id,
+                mut tool_name,
+                mut tool_index,
+            )| async move {
                 use futures::StreamExt;
                 loop {
                     // Extract a complete SSE line from the buffer
@@ -463,7 +478,14 @@ impl LlmProvider for AnthropicProvider {
                                                         tool_calls: vec![],
                                                         done: false,
                                                     }),
-                                                    (byte_stream, buffer, in_thinking),
+                                                    (
+                                                        byte_stream,
+                                                        buffer,
+                                                        in_thinking,
+                                                        tool_id,
+                                                        tool_name,
+                                                        tool_index,
+                                                    ),
                                                 ));
                                             }
                                             StreamDeltaBlock::ThinkingDelta { thinking } => {
@@ -480,12 +502,40 @@ impl LlmProvider for AnthropicProvider {
                                                         tool_calls: vec![],
                                                         done: false,
                                                     }),
-                                                    (byte_stream, buffer, in_thinking),
+                                                    (
+                                                        byte_stream,
+                                                        buffer,
+                                                        in_thinking,
+                                                        tool_id,
+                                                        tool_name,
+                                                        tool_index,
+                                                    ),
                                                 ));
                                             }
-                                            StreamDeltaBlock::InputJsonDelta { .. } => {
-                                                // Tool input streaming — skip for now
-                                                continue;
+                                            StreamDeltaBlock::InputJsonDelta { partial_json } => {
+                                                // Stream the partial JSON as a tool call delta
+                                                let tc = ToolCall {
+                                                    id: String::new(),
+                                                    name: String::new(),
+                                                    arguments: serde_json::Value::String(
+                                                        partial_json,
+                                                    ),
+                                                };
+                                                return Some((
+                                                    Ok(StreamDelta {
+                                                        content: None,
+                                                        tool_calls: vec![tc],
+                                                        done: false,
+                                                    }),
+                                                    (
+                                                        byte_stream,
+                                                        buffer,
+                                                        in_thinking,
+                                                        tool_id,
+                                                        tool_name,
+                                                        tool_index,
+                                                    ),
+                                                ));
                                             }
                                         }
                                     }
@@ -498,7 +548,14 @@ impl LlmProvider for AnthropicProvider {
                                                     tool_calls: vec![],
                                                     done: false,
                                                 }),
-                                                (byte_stream, buffer, in_thinking),
+                                                (
+                                                    byte_stream,
+                                                    buffer,
+                                                    in_thinking,
+                                                    tool_id,
+                                                    tool_name,
+                                                    tool_index,
+                                                ),
                                             ));
                                         }
                                         continue;
@@ -510,7 +567,14 @@ impl LlmProvider for AnthropicProvider {
                                                 tool_calls: vec![],
                                                 done: true,
                                             }),
-                                            (byte_stream, buffer, in_thinking),
+                                            (
+                                                byte_stream,
+                                                buffer,
+                                                in_thinking,
+                                                tool_id,
+                                                tool_name,
+                                                tool_index,
+                                            ),
                                         ));
                                     }
                                     StreamEvent::Error { error } => {
@@ -519,10 +583,49 @@ impl LlmProvider for AnthropicProvider {
                                                 "Anthropic stream error: {}",
                                                 error.message
                                             ))),
-                                            (byte_stream, buffer, in_thinking),
+                                            (
+                                                byte_stream,
+                                                buffer,
+                                                in_thinking,
+                                                tool_id,
+                                                tool_name,
+                                                tool_index,
+                                            ),
                                         ));
                                     }
-                                    // Ping, MessageStart, ContentBlockStart, MessageDelta — skip
+                                    StreamEvent::ContentBlockStart { content_block, .. } => {
+                                        // Track tool_use block metadata for subsequent InputJsonDelta events
+                                        if let StreamContentBlock::ToolUse { id, name } =
+                                            content_block
+                                        {
+                                            // Emit the initial tool call delta with id and name
+                                            let tc = ToolCall {
+                                                id: id.clone(),
+                                                name: name.clone(),
+                                                arguments: serde_json::Value::String(String::new()),
+                                            };
+                                            tool_id = id;
+                                            tool_name = name;
+                                            tool_index += 1;
+                                            return Some((
+                                                Ok(StreamDelta {
+                                                    content: None,
+                                                    tool_calls: vec![tc],
+                                                    done: false,
+                                                }),
+                                                (
+                                                    byte_stream,
+                                                    buffer,
+                                                    in_thinking,
+                                                    tool_id,
+                                                    tool_name,
+                                                    tool_index,
+                                                ),
+                                            ));
+                                        }
+                                        continue;
+                                    }
+                                    // Ping, MessageStart, MessageDelta — skip
                                     _ => continue,
                                 },
                                 Err(_) => {
@@ -542,7 +645,14 @@ impl LlmProvider for AnthropicProvider {
                         Some(Err(e)) => {
                             return Some((
                                 Err(GclawError::Provider(format!("Stream read error: {e}"))),
-                                (byte_stream, buffer, in_thinking),
+                                (
+                                    byte_stream,
+                                    buffer,
+                                    in_thinking,
+                                    tool_id,
+                                    tool_name,
+                                    tool_index,
+                                ),
                             ));
                         }
                         None => return None,

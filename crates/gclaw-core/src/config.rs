@@ -11,6 +11,8 @@ pub struct Config {
     pub channels: ChannelsConfig,
     #[serde(default)]
     pub container: ContainerConfig,
+    #[serde(default)]
+    pub routing: RoutingConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -249,6 +251,26 @@ impl Default for AgentConfig {
     }
 }
 
+/// Model routing configuration.
+///
+/// ```toml
+/// [routing]
+/// coding = "anthropic/claude-sonnet-4-6"
+/// simple = "ollama/qwen3.5:4b"
+/// ```
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct RoutingConfig {
+    /// Model for tool-heavy / coding tasks (e.g. "anthropic/claude-sonnet-4-6")
+    #[serde(default)]
+    pub coding: Option<String>,
+    /// Model for simple Q&A without tools (e.g. "ollama/qwen3.5:4b")
+    #[serde(default)]
+    pub simple: Option<String>,
+    /// Fallback providers tried in order if primary fails (e.g. ["openai/gpt-4o", "ollama/qwen3.5:9b"])
+    #[serde(default)]
+    pub fallback: Vec<String>,
+}
+
 impl Default for ContainerConfig {
     fn default() -> Self {
         Self {
@@ -260,6 +282,53 @@ impl Default for ContainerConfig {
 }
 
 impl Config {
+    /// Validate configuration and return warnings for potential issues.
+    pub fn validate(&self) -> Vec<String> {
+        let mut warnings = Vec::new();
+
+        match self.provider.active.as_str() {
+            "ollama" | "openai" | "anthropic" => {}
+            other => {
+                warnings.push(format!(
+                    "Unknown provider '{}' — falling back to Ollama. Valid values: ollama, openai, anthropic",
+                    other
+                ));
+            }
+        }
+
+        if self.provider.active == "openai" && self.provider.openai.api_key.is_empty() {
+            warnings.push(
+                "OpenAI provider selected but no API key configured. Set GCLAW_OPENAI_API_KEY or provider.openai.api_key".to_string(),
+            );
+        }
+
+        if self.provider.active == "anthropic" && self.provider.anthropic.api_key.is_empty() {
+            warnings.push(
+                "Anthropic provider selected but no API key configured. Set ANTHROPIC_API_KEY or provider.anthropic.api_key".to_string(),
+            );
+        }
+
+        if let Ok(url) = self.provider.ollama.url.parse::<url::Url>() {
+            if url.scheme() != "http" && url.scheme() != "https" {
+                warnings.push(format!(
+                    "Ollama URL has unexpected scheme '{}' — expected http or https",
+                    url.scheme()
+                ));
+            }
+        } else if self.provider.active == "ollama" {
+            warnings.push(format!(
+                "Ollama URL '{}' is not a valid URL",
+                self.provider.ollama.url
+            ));
+        }
+
+        if self.agent.max_iterations == 0 {
+            warnings.push("agent.max_iterations is 0 — agent will never respond".to_string());
+        }
+
+        warnings
+    }
+
     pub fn load() -> crate::Result<Self> {
         let path = Self::config_path();
         if path.exists() {
@@ -297,7 +366,6 @@ impl Config {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Write;
 
     #[test]
     fn load_from_toml_file() {
@@ -338,6 +406,41 @@ system_prompt = "Be concise."
         assert_eq!(cfg.agent.system_prompt, "You are a helpful assistant.");
         assert!(!cfg.container.enabled);
         assert_eq!(cfg.provider.active, "ollama");
+    }
+
+    #[test]
+    fn validate_warns_on_unknown_provider() {
+        let mut cfg = Config::default();
+        cfg.provider.active = "gpt-magic".to_string();
+        let warnings = cfg.validate();
+        assert!(warnings.iter().any(|w| w.contains("Unknown provider")));
+    }
+
+    #[test]
+    fn validate_warns_on_empty_api_key() {
+        let mut cfg = Config::default();
+        cfg.provider.active = "openai".to_string();
+        cfg.provider.openai.api_key = String::new();
+        let warnings = cfg.validate();
+        assert!(warnings.iter().any(|w| w.contains("API key")));
+    }
+
+    #[test]
+    fn validate_warns_on_zero_iterations() {
+        let mut cfg = Config::default();
+        cfg.agent.max_iterations = 0;
+        let warnings = cfg.validate();
+        assert!(warnings.iter().any(|w| w.contains("max_iterations")));
+    }
+
+    #[test]
+    fn validate_clean_for_defaults() {
+        let cfg = Config::default();
+        let warnings = cfg.validate();
+        assert!(
+            warnings.is_empty(),
+            "Default config should have no warnings: {warnings:?}"
+        );
     }
 
     #[test]

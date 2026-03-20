@@ -932,6 +932,7 @@ dependencies = [
  "gclaw-core",
  "gclaw-providers",
  "gclaw-tui",
+ "reqwest 0.12.28",
  "tokio",
  "tracing",
  "tracing-subscriber",
@@ -945,8 +946,11 @@ dependencies = [
  "futures",
  "gclaw-core",
  "reqwest 0.12.28",
+ "serde",
  "serde_json",
+ "tempfile",
  "tokio",
+ "toml",
  "tracing",
 ]
 
@@ -982,6 +986,7 @@ dependencies = [
  "tokio",
  "toml",
  "tracing",
+ "url",
 ]
 
 [[package]]

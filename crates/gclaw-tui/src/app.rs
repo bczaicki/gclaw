@@ -46,6 +46,7 @@ pub struct App {
     pub is_thinking: bool,
     pub thinking_collapsed: bool,
     pub onboarding: Option<OnboardingState>,
+    pub startup_warnings: Vec<String>,
 }
 
 impl App {
@@ -72,7 +73,20 @@ impl App {
             is_thinking: false,
             thinking_collapsed: false,
             onboarding: None,
+            startup_warnings: Vec::new(),
         }
+    }
+
+    pub fn with_startup_warnings(mut self, warnings: Vec<String>) -> Self {
+        // Add warnings as system messages so user sees them
+        for w in &warnings {
+            self.messages.push(ChatMessage {
+                sender: "System".to_string(),
+                content: w.clone(),
+            });
+        }
+        self.startup_warnings = warnings;
+        self
     }
 
     pub fn with_onboarding(mut self, workspace_dir: PathBuf) -> Self {
@@ -84,11 +98,34 @@ impl App {
         self.onboarding.is_some()
     }
 
+    /// Returns `Some(input)` if the message should be sent to the agent,
+    /// or `None` if it was a local command that was handled in-place.
     pub fn submit_input(&mut self) -> Option<String> {
         if self.input.trim().is_empty() {
             return None;
         }
         let input = self.input.clone();
+
+        // Handle /model command locally
+        if let Some(model_arg) = input.strip_prefix("/model") {
+            let model_arg = model_arg.trim();
+            self.input.clear();
+            self.cursor_position = 0;
+            if model_arg.is_empty() {
+                self.messages.push(ChatMessage {
+                    sender: "System".to_string(),
+                    content: format!("Current model: {}", self.model_name),
+                });
+            } else {
+                self.model_name = model_arg.to_string();
+                self.messages.push(ChatMessage {
+                    sender: "System".to_string(),
+                    content: format!("Switched to model: {model_arg}"),
+                });
+            }
+            return None;
+        }
+
         self.messages.push(ChatMessage {
             sender: "You".to_string(),
             content: input.clone(),

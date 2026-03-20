@@ -381,6 +381,9 @@ impl LlmProvider for OpenAiProvider {
                             match serde_json::from_str::<OaiStreamChunk>(data) {
                                 Ok(chunk) => {
                                     if let Some(choice) = chunk.choices.first() {
+                                        // Pass tool call deltas through as-is with raw
+                                        // argument fragments — the agent loop's accumulator
+                                        // will reconstruct complete tool calls.
                                         let tool_calls = choice
                                             .delta
                                             .tool_calls
@@ -398,12 +401,9 @@ impl LlmProvider for OpenAiProvider {
                                                         Some(ToolCall {
                                                             id: tc.id.clone().unwrap_or_default(),
                                                             name,
-                                                            arguments: serde_json::from_str(&args)
-                                                                .unwrap_or(
-                                                                    serde_json::Value::Object(
-                                                                        serde_json::Map::new(),
-                                                                    ),
-                                                                ),
+                                                            arguments: serde_json::Value::String(
+                                                                args,
+                                                            ),
                                                         })
                                                     })
                                                     .collect()

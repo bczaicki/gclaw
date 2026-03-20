@@ -1,6 +1,6 @@
 use clap::Parser;
 use gclaw_agent::tools::{FileReadTool, FileWriteTool, ListDirTool, ShellExecTool, WebFetchTool};
-use gclaw_agent::{AgentLoop, ContainerExecutor, ToolExecutor};
+use gclaw_agent::{load_plugins, AgentLoop, ContainerExecutor, ToolExecutor};
 use gclaw_channels::TuiChannel;
 use gclaw_core::traits::{Channel, LlmProvider};
 use gclaw_core::types::{AgentEvent, InboundMessage, OutboundMessage};
@@ -53,8 +53,59 @@ fn main() -> anyhow::Result<()> {
 
     info!("gclaw starting");
 
+    // Validate config
+    let api_key_overrides = [
+        ("openai", std::env::var("GCLAW_OPENAI_API_KEY").ok()),
+        ("anthropic", std::env::var("ANTHROPIC_API_KEY").ok()),
+    ];
+    for warning in config.validate() {
+        // Suppress API key warnings if the env var is set
+        let suppress = api_key_overrides.iter().any(|(provider, key)| {
+            key.is_some() && config.provider.active == *provider && warning.contains("API key")
+        });
+        if !suppress {
+            warn!("Config: {warning}");
+            eprintln!("Warning: {warning}");
+        }
+    }
+
     // Build tokio runtime
     let rt = tokio::runtime::Runtime::new()?;
+
+    // Ollama availability check
+    if config.provider.active == "ollama" {
+        let url = config.provider.ollama.url.clone();
+        let check = rt.block_on(async {
+            let client = reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(5))
+                .build()
+                .unwrap();
+            client.get(format!("{url}/api/tags")).send().await
+        });
+        match check {
+            Ok(resp) if resp.status().is_success() => {
+                info!("Ollama is reachable at {}", config.provider.ollama.url);
+            }
+            Ok(resp) => {
+                warn!(
+                    "Ollama returned status {} — it may not be ready",
+                    resp.status()
+                );
+                eprintln!(
+                    "Warning: Ollama at {} returned status {} — is it running?",
+                    config.provider.ollama.url,
+                    resp.status()
+                );
+            }
+            Err(e) => {
+                warn!("Cannot reach Ollama at {}: {e}", config.provider.ollama.url);
+                eprintln!(
+                    "Warning: Cannot reach Ollama at {} — is it running?\n  Error: {e}",
+                    config.provider.ollama.url
+                );
+            }
+        }
+    }
 
     // Provider selection
     let (provider, model): (Arc<dyn LlmProvider>, String) = match config.provider.active.as_str() {
@@ -119,8 +170,8 @@ fn main() -> anyhow::Result<()> {
     executor.register(Arc::new(ListDirTool));
     executor.register(Arc::new(WebFetchTool::new()));
 
-    // Wrap in container executor if enabled
-    let executor = ContainerExecutor::new(config.container.clone(), executor);
+    // Wrap in container executor if enabled (plugins loaded below after workspace resolution)
+    let mut executor = ContainerExecutor::new(config.container.clone(), executor);
 
     // Load workspace (SOUL.md, IDENTITY.md, AGENTS.md, etc.)
     let workspace_dir = resolve_workspace_dir(config.agent.workspace_dir.as_deref());
@@ -130,6 +181,20 @@ fn main() -> anyhow::Result<()> {
         info!("Workspace loaded from {}", workspace_dir.display());
     } else {
         info!("No workspace found, using default system prompt");
+    }
+
+    // Load plugin tools from workspace/tools/
+    let tools_dir = workspace_dir.join("tools");
+    let plugins = load_plugins(&tools_dir);
+    if !plugins.is_empty() {
+        info!(
+            "Loaded {} plugin tool(s) from {}",
+            plugins.len(),
+            tools_dir.display()
+        );
+    }
+    for plugin in plugins {
+        executor.register(plugin);
     }
 
     // Agent loop
@@ -146,7 +211,7 @@ fn main() -> anyhow::Result<()> {
     let (gateway_tx, mut gateway_rx) = mpsc::channel::<InboundMessage>(100);
 
     // Collect all active channels for response routing
-    let channel_map = rt.block_on(start_channels(&config, gateway_tx.clone()));
+    let (channel_map, channel_errors) = rt.block_on(start_channels(&config, gateway_tx.clone()));
     let channel_map = Arc::new(channel_map);
 
     // Spawn gateway message processor for messaging channels
@@ -239,6 +304,9 @@ fn main() -> anyhow::Result<()> {
 
         let mut tui = Tui::new()?;
         let mut app = App::new(model, conversation_id);
+        if !channel_errors.is_empty() {
+            app = app.with_startup_warnings(channel_errors);
+        }
         if workspace.bootstrap.is_some() {
             app = app.with_onboarding(workspace_dir);
         }
@@ -253,12 +321,14 @@ fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Start all enabled messaging channels and return a map for response routing.
+/// Start all enabled messaging channels and return a map for response routing
+/// plus any startup errors for display.
 async fn start_channels(
     config: &Config,
     gateway_tx: mpsc::Sender<InboundMessage>,
-) -> HashMap<String, Arc<dyn Channel>> {
+) -> (HashMap<String, Arc<dyn Channel>>, Vec<String>) {
     let mut map: HashMap<String, Arc<dyn Channel>> = HashMap::new();
+    let mut errors = Vec::new();
 
     if config.channels.telegram.enabled {
         let ch = Arc::new(gclaw_channels::TelegramChannel::new(
@@ -269,7 +339,11 @@ async fn start_channels(
                 info!("Telegram channel started");
                 map.insert("telegram".to_string(), ch);
             }
-            Err(e) => error!("Failed to start Telegram: {e}"),
+            Err(e) => {
+                let msg = format!("Failed to start Telegram: {e}");
+                error!("{msg}");
+                errors.push(msg);
+            }
         }
     }
 
@@ -282,7 +356,11 @@ async fn start_channels(
                 info!("Discord channel started");
                 map.insert("discord".to_string(), ch);
             }
-            Err(e) => error!("Failed to start Discord: {e}"),
+            Err(e) => {
+                let msg = format!("Failed to start Discord: {e}");
+                error!("{msg}");
+                errors.push(msg);
+            }
         }
     }
 
@@ -293,7 +371,11 @@ async fn start_channels(
                 info!("Slack channel started");
                 map.insert("slack".to_string(), ch);
             }
-            Err(e) => error!("Failed to start Slack: {e}"),
+            Err(e) => {
+                let msg = format!("Failed to start Slack: {e}");
+                error!("{msg}");
+                errors.push(msg);
+            }
         }
     }
 
@@ -306,9 +388,13 @@ async fn start_channels(
                 info!("WhatsApp channel started");
                 map.insert("whatsapp".to_string(), ch);
             }
-            Err(e) => error!("Failed to start WhatsApp: {e}"),
+            Err(e) => {
+                let msg = format!("Failed to start WhatsApp: {e}");
+                error!("{msg}");
+                errors.push(msg);
+            }
         }
     }
 
-    map
+    (map, errors)
 }
