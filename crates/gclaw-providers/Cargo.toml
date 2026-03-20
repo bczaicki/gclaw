@@ -6,7 +6,7 @@ license = "LGPL-2.1"
 
 [dependencies]
 gclaw-core = { path = "../gclaw-core" }
-ollama-rs = { version = "0.2", features = ["stream"] }
+ollama-rs = { version = "0.3", features = ["stream"] }
 tokio = { version = "1", features = ["sync"] }
 async-trait = "0.1"
 futures = "0.3"
