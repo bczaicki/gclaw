@@ -86,7 +86,7 @@ fn default_anthropic_url() -> String {
 }
 
 fn default_anthropic_model() -> String {
-    "claude-sonnet-4-20250514".to_string()
+    "claude-sonnet-4-6".to_string()
 }
 
 fn default_anthropic_max_tokens() -> u32 {

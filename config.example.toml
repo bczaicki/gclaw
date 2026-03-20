@@ -13,7 +13,7 @@ default_model = "gpt-4o-mini"
 [provider.anthropic]
 base_url = "https://api.anthropic.com"
 api_key = ""  # or set ANTHROPIC_API_KEY env var
-default_model = "claude-sonnet-4-20250514"
+default_model = "claude-sonnet-4-6"
 max_tokens = 8192
 
 [agent]

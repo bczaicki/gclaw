@@ -558,17 +558,17 @@ impl LlmProvider for AnthropicProvider {
         // Anthropic doesn't have a list models endpoint — return known models
         Ok(vec![
             ModelInfo {
-                name: "claude-sonnet-4-20250514".to_string(),
+                name: "claude-opus-4-6".to_string(),
                 size: None,
                 parameters: HashMap::new(),
             },
             ModelInfo {
-                name: "claude-haiku-4-20250414".to_string(),
+                name: "claude-sonnet-4-6".to_string(),
                 size: None,
                 parameters: HashMap::new(),
             },
             ModelInfo {
-                name: "claude-opus-4-20250514".to_string(),
+                name: "claude-haiku-4-5-20251001".to_string(),
                 size: None,
                 parameters: HashMap::new(),
             },
