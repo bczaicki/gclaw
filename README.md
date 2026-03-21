@@ -84,7 +84,7 @@ active = "ollama"
 
 [provider.ollama]
 url = "http://localhost:11434"
-default_model = "qwen3.5:9b"
+default_model = "qwen3.5:4b"
 ```
 
 ### Anthropic (Claude)

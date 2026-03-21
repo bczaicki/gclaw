@@ -1,13 +1,13 @@
 # USER
 
-- **Name:**
-- **Pronouns:**
-- **Timezone:**
+- **Name:** B
+- **Pronouns:** he/him
+- **Timezone:** pst
 
 ## Current Projects
 
--
+- glcaw
 
 ## Preferences
 
-- **Communication:**
+- **Communication:** terse

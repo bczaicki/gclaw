@@ -143,7 +143,7 @@ fn default_ollama_url() -> String {
 }
 
 fn default_model() -> String {
-    "qwen3.5:9b".to_string()
+    "qwen3.5:4b".to_string()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -290,7 +290,7 @@ pub struct RoutingConfig {
     /// Model for simple Q&A without tools (e.g. "ollama/qwen3.5:4b")
     #[serde(default)]
     pub simple: Option<String>,
-    /// Fallback providers tried in order if primary fails (e.g. ["openai/gpt-4o", "ollama/qwen3.5:9b"])
+    /// Fallback providers tried in order if primary fails (e.g. ["openai/gpt-4o", "ollama/qwen3.5:4b"])
     #[serde(default)]
     pub fallback: Vec<String>,
 }
@@ -426,7 +426,7 @@ system_prompt = "Be concise."
     fn default_config_values() {
         let cfg = Config::default();
         assert_eq!(cfg.provider.ollama.url, "http://localhost:11434");
-        assert_eq!(cfg.provider.ollama.default_model, "qwen3.5:9b");
+        assert_eq!(cfg.provider.ollama.default_model, "qwen3.5:4b");
         assert_eq!(cfg.agent.system_prompt, "You are a helpful assistant.");
         assert!(!cfg.container.enabled);
         assert_eq!(cfg.provider.active, "ollama");
