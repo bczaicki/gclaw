@@ -7,6 +7,7 @@
 use gclaw_agent::tools::ShellExecTool;
 use gclaw_agent::{ContainerExecutor, ToolExecutor};
 use gclaw_core::config::ContainerConfig;
+use gclaw_core::config::OllamaConfig;
 use gclaw_core::traits::{LlmProvider, Memory};
 use gclaw_core::types::{CompletionRequest, Message, Role};
 use gclaw_core::SqliteMemory;
@@ -14,7 +15,7 @@ use gclaw_providers::OllamaProvider;
 use std::sync::Arc;
 
 fn make_provider() -> OllamaProvider {
-    OllamaProvider::new("http://localhost:11434", "qwen3.5:4b")
+    OllamaProvider::new(&OllamaConfig::default())
 }
 
 fn make_memory() -> Arc<SqliteMemory> {

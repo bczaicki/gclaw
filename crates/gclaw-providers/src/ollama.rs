@@ -1,26 +1,79 @@
 use async_trait::async_trait;
+use gclaw_core::config::OllamaConfig;
 use gclaw_core::traits::LlmProvider;
 use gclaw_core::types::*;
 use gclaw_core::{GclawError, Result};
 use ollama_rs::generation::chat::request::ChatMessageRequest;
 use ollama_rs::generation::chat::{ChatMessage, ChatMessageResponse, MessageRole};
+use ollama_rs::generation::options::GenerationOptions;
 use ollama_rs::Ollama;
 use std::pin::Pin;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio_stream::StreamExt;
 use tracing::debug;
 
 pub struct OllamaProvider {
     client: Arc<Ollama>,
     default_model: String,
+    disable_thinking: bool,
+    num_predict: Option<i32>,
 }
 
 impl OllamaProvider {
-    pub fn new(url: &str, default_model: &str) -> Self {
-        let (host, port) = parse_url(url);
+    pub fn new(config: &OllamaConfig) -> Self {
+        let (host, port) = parse_url(&config.url);
+
+        let client = if let Some(timeout_secs) = config.timeout_secs {
+            let reqwest_client = reqwest::Client::builder()
+                .timeout(Duration::from_secs(timeout_secs))
+                .build()
+                .expect("Failed to build reqwest client");
+            Ollama::new_with_client(host, port, reqwest_client)
+        } else {
+            Ollama::new(host, port)
+        };
+
         Self {
-            client: Arc::new(Ollama::new(host, port)),
-            default_model: default_model.to_string(),
+            client: Arc::new(client),
+            default_model: config.default_model.clone(),
+            disable_thinking: config.disable_thinking,
+            num_predict: config.num_predict,
+        }
+    }
+
+    /// Append /no_think to the first system message when thinking is disabled.
+    fn maybe_inject_no_think(disable_thinking: bool, messages: &mut [ChatMessage]) {
+        if !disable_thinking {
+            return;
+        }
+        for msg in messages.iter_mut() {
+            if msg.role == MessageRole::System {
+                if !msg.content.ends_with("/no_think") {
+                    msg.content.push_str("\n/no_think");
+                }
+                break;
+            }
+        }
+    }
+
+    fn build_generation_options(&self, temperature: Option<f32>) -> Option<GenerationOptions> {
+        let mut opts = GenerationOptions::default();
+        let mut has_opts = false;
+
+        if let Some(np) = self.num_predict {
+            opts = opts.num_predict(np);
+            has_opts = true;
+        }
+        if let Some(temp) = temperature {
+            opts = opts.temperature(temp);
+            has_opts = true;
+        }
+
+        if has_opts {
+            Some(opts)
+        } else {
+            None
         }
     }
 }
@@ -81,8 +134,13 @@ impl LlmProvider for OllamaProvider {
             &request.model
         };
 
-        let messages = to_ollama_messages(&request.messages);
-        let chat_req = ChatMessageRequest::new(model.to_string(), messages);
+        let mut messages = to_ollama_messages(&request.messages);
+        Self::maybe_inject_no_think(self.disable_thinking, &mut messages);
+
+        let mut chat_req = ChatMessageRequest::new(model.to_string(), messages);
+        if let Some(opts) = self.build_generation_options(request.temperature) {
+            chat_req = chat_req.options(opts);
+        }
 
         debug!("Sending chat request to Ollama model: {model}");
         let resp = self
@@ -104,8 +162,13 @@ impl LlmProvider for OllamaProvider {
             &request.model
         };
 
-        let messages = to_ollama_messages(&request.messages);
-        let chat_req = ChatMessageRequest::new(model.to_string(), messages);
+        let mut messages = to_ollama_messages(&request.messages);
+        Self::maybe_inject_no_think(self.disable_thinking, &mut messages);
+
+        let mut chat_req = ChatMessageRequest::new(model.to_string(), messages);
+        if let Some(opts) = self.build_generation_options(request.temperature) {
+            chat_req = chat_req.options(opts);
+        }
 
         let stream = self
             .client
@@ -145,5 +208,66 @@ impl LlmProvider for OllamaProvider {
 
     fn name(&self) -> &str {
         "ollama"
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn no_think_injection_appends_to_system() {
+        let mut msgs = vec![
+            ChatMessage::new(MessageRole::System, "You are helpful.".to_string()),
+            ChatMessage::new(MessageRole::User, "Hello".to_string()),
+        ];
+        OllamaProvider::maybe_inject_no_think(true, &mut msgs);
+        assert!(msgs[0].content.ends_with("/no_think"));
+        assert_eq!(msgs[1].content, "Hello");
+    }
+
+    #[test]
+    fn no_think_not_injected_when_disabled() {
+        let mut msgs = vec![ChatMessage::new(
+            MessageRole::System,
+            "You are helpful.".to_string(),
+        )];
+        OllamaProvider::maybe_inject_no_think(false, &mut msgs);
+        assert_eq!(msgs[0].content, "You are helpful.");
+    }
+
+    #[test]
+    fn no_think_idempotent() {
+        let mut msgs = vec![ChatMessage::new(
+            MessageRole::System,
+            "You are helpful.\n/no_think".to_string(),
+        )];
+        OllamaProvider::maybe_inject_no_think(true, &mut msgs);
+        // Should not double-append
+        assert_eq!(msgs[0].content, "You are helpful.\n/no_think");
+    }
+
+    #[test]
+    fn build_opts_with_num_predict() {
+        let provider = OllamaProvider::new(&OllamaConfig {
+            num_predict: Some(512),
+            ..OllamaConfig::default()
+        });
+        let opts = provider.build_generation_options(None);
+        assert!(opts.is_some());
+    }
+
+    #[test]
+    fn build_opts_none_when_empty() {
+        let provider = OllamaProvider::new(&OllamaConfig::default());
+        let opts = provider.build_generation_options(None);
+        assert!(opts.is_none());
+    }
+
+    #[test]
+    fn build_opts_with_temperature() {
+        let provider = OllamaProvider::new(&OllamaConfig::default());
+        let opts = provider.build_generation_options(Some(0.7));
+        assert!(opts.is_some());
     }
 }

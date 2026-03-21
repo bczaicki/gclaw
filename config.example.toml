@@ -4,6 +4,9 @@ active = "ollama"  # "ollama", "openai", or "anthropic"
 [provider.ollama]
 url = "http://localhost:11434"
 default_model = "qwen3.5:4b"
+# disable_thinking = false    # Set true to add /no_think to system prompt (Qwen3 models)
+# num_predict = 2048           # Max tokens to generate (thinking + response). Default: model default
+# timeout_secs = 120           # Request timeout in seconds. Default: no timeout
 
 [provider.openai]
 base_url = "https://api.openai.com/v1"  # or any OpenAI-compatible endpoint

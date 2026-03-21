@@ -136,6 +136,17 @@ pub struct OllamaConfig {
     pub url: String,
     #[serde(default = "default_model")]
     pub default_model: String,
+    /// Disable model thinking/reasoning (appends /no_think to system prompt).
+    /// Useful for Qwen3 models that support this directive.
+    #[serde(default)]
+    pub disable_thinking: bool,
+    /// Maximum number of tokens to generate (thinking + response combined).
+    /// Maps to Ollama's num_predict option.
+    #[serde(default)]
+    pub num_predict: Option<i32>,
+    /// Request timeout in seconds for completion calls.
+    #[serde(default)]
+    pub timeout_secs: Option<u64>,
 }
 
 fn default_ollama_url() -> String {
@@ -261,6 +272,9 @@ impl Default for OllamaConfig {
         Self {
             url: default_ollama_url(),
             default_model: default_model(),
+            disable_thinking: false,
+            num_predict: None,
+            timeout_secs: None,
         }
     }
 }
@@ -344,6 +358,18 @@ impl Config {
                 "Ollama URL '{}' is not a valid URL",
                 self.provider.ollama.url
             ));
+        }
+
+        if self.provider.ollama.num_predict == Some(0) {
+            warnings.push(
+                "provider.ollama.num_predict is 0 — model will generate no tokens".to_string(),
+            );
+        }
+
+        if matches!(self.provider.ollama.timeout_secs, Some(t) if t < 5) {
+            warnings.push(
+                "provider.ollama.timeout_secs is very small (<5s) — requests may time out prematurely".to_string(),
+            );
         }
 
         if self.agent.max_iterations == 0 {
@@ -465,6 +491,57 @@ system_prompt = "Be concise."
             warnings.is_empty(),
             "Default config should have no warnings: {warnings:?}"
         );
+    }
+
+    #[test]
+    fn ollama_new_fields_default() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        std::fs::write(
+            &path,
+            "[provider.ollama]\nurl = \"http://localhost:11434\"\n",
+        )
+        .unwrap();
+        let cfg = Config::load_from_path(&path).unwrap();
+        assert!(!cfg.provider.ollama.disable_thinking);
+        assert!(cfg.provider.ollama.num_predict.is_none());
+        assert!(cfg.provider.ollama.timeout_secs.is_none());
+    }
+
+    #[test]
+    fn ollama_new_fields_set() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        std::fs::write(
+            &path,
+            r#"
+[provider.ollama]
+disable_thinking = true
+num_predict = 2048
+timeout_secs = 120
+"#,
+        )
+        .unwrap();
+        let cfg = Config::load_from_path(&path).unwrap();
+        assert!(cfg.provider.ollama.disable_thinking);
+        assert_eq!(cfg.provider.ollama.num_predict, Some(2048));
+        assert_eq!(cfg.provider.ollama.timeout_secs, Some(120));
+    }
+
+    #[test]
+    fn validate_warns_on_zero_num_predict() {
+        let mut cfg = Config::default();
+        cfg.provider.ollama.num_predict = Some(0);
+        let warnings = cfg.validate();
+        assert!(warnings.iter().any(|w| w.contains("num_predict")));
+    }
+
+    #[test]
+    fn validate_warns_on_small_timeout() {
+        let mut cfg = Config::default();
+        cfg.provider.ollama.timeout_secs = Some(2);
+        let warnings = cfg.validate();
+        assert!(warnings.iter().any(|w| w.contains("timeout_secs")));
     }
 
     #[test]

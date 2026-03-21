@@ -169,14 +169,13 @@ fn main() -> anyhow::Result<()> {
             )
         }
         _ => {
-            let m = cli
-                .model
-                .unwrap_or_else(|| config.provider.ollama.default_model.clone());
-            info!("Using Ollama provider at {}", config.provider.ollama.url);
-            (
-                Arc::new(OllamaProvider::new(&config.provider.ollama.url, &m)),
-                m,
-            )
+            let mut ollama_config = config.provider.ollama.clone();
+            if let Some(ref model) = cli.model {
+                ollama_config.default_model = model.clone();
+            }
+            let m = ollama_config.default_model.clone();
+            info!("Using Ollama provider at {}", ollama_config.url);
+            (Arc::new(OllamaProvider::new(&ollama_config)), m)
         }
     };
 
