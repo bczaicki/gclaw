@@ -103,4 +103,5 @@ pub enum AgentEvent {
     },
     Done(String),
     Error(String),
+    Metric { name: String, value: String },
 }

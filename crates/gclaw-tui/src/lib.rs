@@ -5,7 +5,7 @@ pub mod ui;
 pub mod widgets;
 
 use app::App;
-use crossterm::event::{KeyCode, KeyModifiers};
+use crossterm::event::{EnableMouseCapture, DisableMouseCapture, KeyCode, KeyModifiers, MouseEventKind};
 use crossterm::execute;
 use crossterm::terminal::{self, EnterAlternateScreen, LeaveAlternateScreen};
 use event::{AppEvent, EventHandler};
@@ -22,7 +22,7 @@ impl Tui {
     pub fn new() -> io::Result<Self> {
         terminal::enable_raw_mode()?;
         let mut stdout = io::stdout();
-        execute!(stdout, EnterAlternateScreen)?;
+        execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
         let backend = CrosstermBackend::new(stdout);
         let terminal = Terminal::new(backend)?;
         Ok(Self { terminal })
@@ -30,7 +30,7 @@ impl Tui {
 
     pub fn restore(&mut self) -> io::Result<()> {
         terminal::disable_raw_mode()?;
-        execute!(self.terminal.backend_mut(), LeaveAlternateScreen)?;
+        execute!(self.terminal.backend_mut(), LeaveAlternateScreen, DisableMouseCapture)?;
         self.terminal.show_cursor()?;
         Ok(())
     }
@@ -58,6 +58,16 @@ impl Tui {
                             self.handle_chat_key(app, key.code, key.modifiers, input_tx);
                         }
                     }
+                    AppEvent::Mouse(mouse) => match mouse.kind {
+                        MouseEventKind::ScrollUp => {
+                            app.scroll_offset = app.scroll_offset.saturating_sub(3);
+                            app.auto_scroll = false;
+                        }
+                        MouseEventKind::ScrollDown => {
+                            app.scroll_offset = app.scroll_offset.saturating_add(3);
+                        }
+                        _ => {}
+                    },
                     AppEvent::Agent(agent_event) => {
                         app.handle_agent_event(agent_event);
                     }
@@ -175,6 +185,15 @@ impl Tui {
                     app.next_conversation();
                     return;
                 }
+                KeyCode::Up => {
+                    app.scroll_offset = app.scroll_offset.saturating_sub(3);
+                    app.auto_scroll = false;
+                    return;
+                }
+                KeyCode::Down => {
+                    app.scroll_offset = app.scroll_offset.saturating_add(3);
+                    return;
+                }
                 _ => {}
             }
         }
@@ -203,9 +222,11 @@ impl Tui {
             KeyCode::Right => app.move_cursor_right(),
             KeyCode::PageUp => {
                 app.scroll_offset = app.scroll_offset.saturating_sub(10);
+                app.auto_scroll = false;
             }
             KeyCode::PageDown => {
                 app.scroll_offset = app.scroll_offset.saturating_add(10);
+                app.auto_scroll = false;
             }
             KeyCode::Char(c) => app.insert_char(c),
             _ => {}

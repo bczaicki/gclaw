@@ -6,7 +6,7 @@ use gclaw_core::traits::{LlmProvider, Memory};
 use gclaw_core::types::*;
 use gclaw_core::{GclawError, Result};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
 use tracing::{debug, warn};
 
@@ -168,16 +168,35 @@ impl AgentLoop {
                     let req = request.clone();
                     let tx = tx.clone();
                     async move {
+                        let stream_start = Instant::now();
                         let mut stream = provider.complete_stream(req).await?;
                         let mut parser = ThinkParser::new();
                         let mut tool_acc = ToolCallAccumulator::default();
+                        let mut ttft_sent = false;
+                        let mut ttfvt_sent = false;
 
                         while let Some(result) = stream.next().await {
                             match result {
                                 Ok(delta) => {
                                     if let Some(ref text) = delta.content {
                                         if !text.is_empty() {
+                                            if !ttft_sent {
+                                                let elapsed = stream_start.elapsed();
+                                                let _ = tx.send(AgentEvent::Metric {
+                                                    name: "ttft".to_string(),
+                                                    value: format!("{}ms", elapsed.as_millis()),
+                                                });
+                                                ttft_sent = true;
+                                            }
                                             parser.feed(text, &tx);
+                                            if !ttfvt_sent && !parser.content().is_empty() {
+                                                let elapsed = stream_start.elapsed();
+                                                let _ = tx.send(AgentEvent::Metric {
+                                                    name: "ttfvt".to_string(),
+                                                    value: format!("{}ms", elapsed.as_millis()),
+                                                });
+                                                ttfvt_sent = true;
+                                            }
                                         }
                                     }
                                     for (i, tc) in delta.tool_calls.iter().enumerate() {

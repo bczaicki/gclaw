@@ -1,9 +1,10 @@
-use crossterm::event::{self, Event as CrosstermEvent, KeyEvent};
+use crossterm::event::{self, Event as CrosstermEvent, KeyEvent, MouseEvent};
 use gclaw_core::AgentEvent;
 use std::time::Duration;
 
 pub enum AppEvent {
     Key(KeyEvent),
+    Mouse(MouseEvent),
     Agent(AgentEvent),
     Tick,
 }
@@ -25,8 +26,10 @@ impl EventHandler {
 
         // Check for crossterm events with timeout
         if event::poll(Duration::from_millis(16)).ok()? {
-            if let Ok(CrosstermEvent::Key(key)) = event::read() {
-                return Some(AppEvent::Key(key));
+            match event::read() {
+                Ok(CrosstermEvent::Key(key)) => return Some(AppEvent::Key(key)),
+                Ok(CrosstermEvent::Mouse(mouse)) => return Some(AppEvent::Mouse(mouse)),
+                _ => {}
             }
         }
 

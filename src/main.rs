@@ -352,7 +352,9 @@ fn main() -> anyhow::Result<()> {
 
         let mut tui = Tui::new()?;
         let skill_names = skill_registry.user_invocable_names();
-        let mut app = App::new(model, conversation_id).with_skill_names(skill_names);
+        let mut app = App::new(model, conversation_id)
+            .with_skill_names(skill_names)
+            .with_debug(config.debug);
         if !channel_errors.is_empty() {
             app = app.with_startup_warnings(channel_errors);
         }

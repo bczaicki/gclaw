@@ -5,7 +5,7 @@ use gclaw_core::types::*;
 use gclaw_core::{GclawError, Result};
 use ollama_rs::generation::chat::request::ChatMessageRequest;
 use ollama_rs::generation::chat::{ChatMessage, ChatMessageResponse, MessageRole};
-use ollama_rs::generation::options::GenerationOptions;
+use ollama_rs::models::ModelOptions;
 use ollama_rs::Ollama;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -57,8 +57,8 @@ impl OllamaProvider {
         }
     }
 
-    fn build_generation_options(&self, temperature: Option<f32>) -> Option<GenerationOptions> {
-        let mut opts = GenerationOptions::default();
+    fn build_generation_options(&self, temperature: Option<f32>) -> Option<ModelOptions> {
+        let mut opts = ModelOptions::default();
         let mut has_opts = false;
 
         if let Some(np) = self.num_predict {
@@ -141,6 +141,9 @@ impl LlmProvider for OllamaProvider {
         if let Some(opts) = self.build_generation_options(request.temperature) {
             chat_req = chat_req.options(opts);
         }
+        if self.disable_thinking {
+            chat_req = chat_req.think(false);
+        }
 
         debug!("Sending chat request to Ollama model: {model}");
         let resp = self
@@ -168,6 +171,9 @@ impl LlmProvider for OllamaProvider {
         let mut chat_req = ChatMessageRequest::new(model.to_string(), messages);
         if let Some(opts) = self.build_generation_options(request.temperature) {
             chat_req = chat_req.options(opts);
+        }
+        if self.disable_thinking {
+            chat_req = chat_req.think(false);
         }
 
         let stream = self

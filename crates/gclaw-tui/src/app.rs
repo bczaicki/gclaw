@@ -60,6 +60,10 @@ pub struct App {
     pub startup_warnings: Vec<String>,
     /// Known skill names for slash-command dispatch.
     pub skill_names: Vec<String>,
+    /// Show debug metrics (TTFT, TTFVT) in chat.
+    pub debug: bool,
+    /// Auto-scroll to bottom during streaming. Disabled by manual PageUp/PageDown.
+    pub auto_scroll: bool,
 }
 
 impl App {
@@ -88,11 +92,18 @@ impl App {
             onboarding: None,
             startup_warnings: Vec::new(),
             skill_names: Vec::new(),
+            debug: false,
+            auto_scroll: true,
         }
     }
 
     pub fn with_skill_names(mut self, names: Vec<String>) -> Self {
         self.skill_names = names;
+        self
+    }
+
+    pub fn with_debug(mut self, debug: bool) -> Self {
+        self.debug = debug;
         self
     }
 
@@ -181,6 +192,7 @@ impl App {
                 self.is_thinking = false;
                 self.thinking_collapsed = false;
                 self.agent_state = AgentState::Thinking;
+                self.auto_scroll = true;
                 return SubmitResult::SkillInvocation {
                     name: cmd.to_string(),
                     args,
@@ -199,6 +211,7 @@ impl App {
         self.is_thinking = false;
         self.thinking_collapsed = false;
         self.agent_state = AgentState::Thinking;
+        self.auto_scroll = true;
         SubmitResult::Message(input)
     }
 
@@ -258,6 +271,14 @@ impl App {
                 });
                 self.is_thinking = false;
                 self.agent_state = AgentState::Idle;
+            }
+            AgentEvent::Metric { name, value } => {
+                if self.debug {
+                    self.messages.push(ChatMessage {
+                        sender: "Debug".to_string(),
+                        content: format!("{name}={value}"),
+                    });
+                }
             }
         }
     }

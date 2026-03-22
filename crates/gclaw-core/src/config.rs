@@ -16,6 +16,9 @@ pub struct Config {
     pub routing: RoutingConfig,
     #[serde(default)]
     pub mcp_servers: HashMap<String, McpServerConfig>,
+    /// Enable debug mode: show timing metrics (TTFT, TTFVT) in the TUI.
+    #[serde(default)]
+    pub debug: bool,
 }
 
 /// Configuration for an external MCP server (stdio transport).

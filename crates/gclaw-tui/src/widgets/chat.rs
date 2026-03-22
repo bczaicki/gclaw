@@ -8,8 +8,9 @@ use ratatui::Frame;
 const THINK_COLOR: Color = Color::Indexed(243); // medium gray
 const THINK_BORDER: Color = Color::Indexed(238); // dark gray
 const THINK_LABEL_COLOR: Color = Color::Indexed(140); // muted purple
+const DIM: Color = Color::Indexed(245);
 
-pub fn render(f: &mut Frame, app: &App, area: Rect) {
+pub fn render(f: &mut Frame, app: &mut App, area: Rect) {
     let mut lines: Vec<Line> = Vec::new();
 
     for msg in &app.messages {
@@ -18,25 +19,45 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
                 render_thinking_block(&msg.content, &mut lines, false);
                 lines.push(Line::from(""));
             }
+            "Debug" => {
+                lines.push(Line::from(vec![
+                    Span::styled("  ", Style::default()),
+                    Span::styled(
+                        &msg.content,
+                        Style::default()
+                            .fg(DIM)
+                            .add_modifier(Modifier::ITALIC),
+                    ),
+                ]));
+            }
             _ => {
-                let (color, label) = match msg.sender.as_str() {
-                    "You" => (Color::Green, "You"),
-                    "Assistant" => (Color::Green, "Assistant"),
-                    "Tool" => (Color::Yellow, "Tool"),
-                    "Error" => (Color::Red, "Error"),
-                    _ => (Color::White, msg.sender.as_str()),
+                let (color, prefix) = match msg.sender.as_str() {
+                    "You" => (Color::White, "● "),
+                    "Assistant" => (Color::Green, "● "),
+                    "Tool" => (Color::Yellow, "  ├ "),
+                    "Error" => (Color::Red, "● "),
+                    "System" => (Color::DarkGray, "  "),
+                    _ => (Color::White, "● "),
                 };
 
-                lines.push(Line::from(vec![Span::styled(
-                    format!("{label}: "),
-                    Style::default().fg(color).add_modifier(Modifier::BOLD),
-                )]));
-
-                for line in msg.content.lines() {
-                    lines.push(Line::from(Span::styled(
-                        format!("  {line}"),
-                        Style::default().fg(Color::White),
-                    )));
+                let content_lines: Vec<&str> = msg.content.lines().collect();
+                if let Some((first, rest)) = content_lines.split_first() {
+                    // First line: prefix + content inline
+                    lines.push(Line::from(vec![
+                        Span::styled(prefix, Style::default().fg(color)),
+                        Span::styled(
+                            first.to_string(),
+                            Style::default().fg(color),
+                        ),
+                    ]));
+                    // Continuation lines indented
+                    let indent = " ".repeat(prefix.len());
+                    for line in rest {
+                        lines.push(Line::from(Span::styled(
+                            format!("{indent}{line}"),
+                            Style::default().fg(color),
+                        )));
+                    }
                 }
                 lines.push(Line::from(""));
             }
@@ -53,17 +74,21 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
 
     // Show live streaming content
     if !app.streaming_content.is_empty() {
-        lines.push(Line::from(vec![Span::styled(
-            "Assistant: ",
-            Style::default()
-                .fg(Color::Green)
-                .add_modifier(Modifier::BOLD),
-        )]));
-        for line in app.streaming_content.lines() {
-            lines.push(Line::from(Span::styled(
-                format!("  {line}"),
-                Style::default().fg(Color::White),
-            )));
+        let content_lines: Vec<&str> = app.streaming_content.lines().collect();
+        if let Some((first, rest)) = content_lines.split_first() {
+            lines.push(Line::from(vec![
+                Span::styled("● ", Style::default().fg(Color::Green)),
+                Span::styled(
+                    first.to_string(),
+                    Style::default().fg(Color::Green),
+                ),
+            ]));
+            for line in rest {
+                lines.push(Line::from(Span::styled(
+                    format!("  {line}"),
+                    Style::default().fg(Color::Green),
+                )));
+            }
         }
     }
 
@@ -93,6 +118,12 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
                 .fg(Color::DarkGray)
                 .add_modifier(Modifier::ITALIC),
         )]));
+    }
+
+    // Auto-scroll: compute offset to keep bottom visible
+    let inner_height = area.height.saturating_sub(2) as usize; // -2 for borders
+    if app.auto_scroll && lines.len() > inner_height {
+        app.scroll_offset = (lines.len() - inner_height) as u16;
     }
 
     let paragraph = Paragraph::new(lines)

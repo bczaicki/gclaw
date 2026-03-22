@@ -3,7 +3,7 @@ use crate::widgets;
 use ratatui::layout::{Constraint, Direction, Layout};
 use ratatui::Frame;
 
-pub fn render(f: &mut Frame, app: &App) {
+pub fn render(f: &mut Frame, app: &mut App) {
     if let Some(ref onboarding) = app.onboarding {
         widgets::onboarding::render(f, onboarding);
         return;
@@ -34,6 +34,7 @@ pub fn render(f: &mut Frame, app: &App) {
         .split(main_area);
 
     widgets::chat::render(f, app, chunks[0]);
+
     widgets::input::render(f, app, chunks[1]);
     widgets::status::render(f, app, chunks[2]);
 }

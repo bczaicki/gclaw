@@ -1,3 +1,5 @@
+# debug = true  # Show timing metrics (TTFT, TTFVT) in the TUI
+
 [provider]
 active = "ollama"  # "ollama", "openai", or "anthropic"
 
