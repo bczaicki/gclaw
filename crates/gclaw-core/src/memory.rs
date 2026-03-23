@@ -10,6 +10,12 @@ pub struct SqliteMemory {
 }
 
 impl SqliteMemory {
+    fn sql_limit(limit: usize) -> Result<i64> {
+        i64::try_from(limit).map_err(|_| {
+            GclawError::Memory("query limit exceeds supported range".to_string())
+        })
+    }
+
     pub fn new(path: &str) -> Result<Self> {
         let conn = Connection::open(path)?;
         conn.execute_batch(
@@ -75,7 +81,8 @@ impl Memory for SqliteMemory {
              WHERE conversation_id = ?1
              ORDER BY created_at DESC LIMIT ?2",
         )?;
-        let rows = stmt.query_map(rusqlite::params![conversation_id, limit], |row| {
+        let limit_sql = Self::sql_limit(limit)?;
+        let rows = stmt.query_map(rusqlite::params![conversation_id, limit_sql], |row| {
             let role_str: String = row.get(0)?;
             let content: String = row.get(1)?;
             let tool_calls_str: String = row.get(2)?;
@@ -116,7 +123,8 @@ impl Memory for SqliteMemory {
              WHERE content LIKE ?1
              ORDER BY created_at DESC LIMIT ?2",
         )?;
-        let rows = stmt.query_map(rusqlite::params![pattern, limit], |row| {
+        let limit_sql = Self::sql_limit(limit)?;
+        let rows = stmt.query_map(rusqlite::params![pattern, limit_sql], |row| {
             let role_str: String = row.get(0)?;
             let content: String = row.get(1)?;
             let tool_calls_str: String = row.get(2)?;
@@ -156,7 +164,8 @@ impl Memory for SqliteMemory {
              ORDER BY MAX(created_at) DESC
              LIMIT ?1",
         )?;
-        let rows = stmt.query_map(rusqlite::params![limit], |row| {
+        let limit_sql = Self::sql_limit(limit)?;
+        let rows = stmt.query_map(rusqlite::params![limit_sql], |row| {
             let id: String = row.get(0)?;
             Ok(id)
         })?;
