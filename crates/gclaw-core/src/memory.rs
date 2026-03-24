@@ -11,9 +11,8 @@ pub struct SqliteMemory {
 
 impl SqliteMemory {
     fn sql_limit(limit: usize) -> Result<i64> {
-        i64::try_from(limit).map_err(|_| {
-            GclawError::Memory("query limit exceeds supported range".to_string())
-        })
+        i64::try_from(limit)
+            .map_err(|_| GclawError::Memory("query limit exceeds supported range".to_string()))
     }
 
     pub fn new(path: &str) -> Result<Self> {
