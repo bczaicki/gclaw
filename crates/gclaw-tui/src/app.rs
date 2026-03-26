@@ -1,4 +1,4 @@
-use crate::onboarding::OnboardingState;
+use crate::onboarding::{OnboardingState, OnboardingStep};
 use gclaw_core::AgentEvent;
 use std::path::PathBuf;
 
@@ -64,6 +64,8 @@ pub struct App {
     pub debug: bool,
     /// Auto-scroll to bottom during streaming. Disabled by manual PageUp/PageDown.
     pub auto_scroll: bool,
+    /// Whether the UI needs to be redrawn. Set to true when state changes.
+    pub needs_redraw: bool,
 }
 
 impl App {
@@ -94,6 +96,7 @@ impl App {
             skill_names: Vec::new(),
             debug: false,
             auto_scroll: true,
+            needs_redraw: true,
         }
     }
 
@@ -126,6 +129,20 @@ impl App {
 
     pub fn is_onboarding(&self) -> bool {
         self.onboarding.is_some()
+    }
+
+    /// Whether the app has active animations requiring frequent redraws.
+    pub fn is_animating(&self) -> bool {
+        if !matches!(self.agent_state, AgentState::Idle) {
+            return true;
+        }
+        if let Some(ref ob) = self.onboarding {
+            return matches!(
+                ob.step,
+                OnboardingStep::Welcome | OnboardingStep::Writing
+            );
+        }
+        false
     }
 
     /// Returns a `SubmitResult` indicating what to do with the input.

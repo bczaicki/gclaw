@@ -13,6 +13,7 @@ use onboarding::OnboardingStep;
 use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
 use std::io;
+use std::time::Duration;
 
 pub struct Tui {
     terminal: Terminal<CrosstermBackend<io::Stdout>>,
@@ -42,11 +43,23 @@ impl Tui {
         input_tx: &tokio::sync::mpsc::UnboundedSender<app::SubmitResult>,
     ) -> io::Result<()> {
         loop {
-            self.terminal.draw(|f| ui::render(f, app))?;
+            // Only redraw when something changed
+            if app.needs_redraw {
+                self.terminal.draw(|f| ui::render(f, app))?;
+                app.needs_redraw = false;
+            }
 
-            if let Some(event) = events.poll_event() {
+            // Adaptive poll timeout: fast when animating, slow when idle
+            let timeout = if app.is_animating() {
+                Duration::from_millis(16)
+            } else {
+                Duration::from_millis(100)
+            };
+
+            if let Some(event) = events.poll_event(timeout) {
                 match event {
                     AppEvent::Key(key) => {
+                        app.needs_redraw = true;
                         // Global quit
                         if key.modifiers.contains(KeyModifiers::CONTROL)
                             && key.code == KeyCode::Char('c')
@@ -62,27 +75,40 @@ impl Tui {
                         MouseEventKind::ScrollUp => {
                             app.scroll_offset = app.scroll_offset.saturating_sub(3);
                             app.auto_scroll = false;
+                            app.needs_redraw = true;
                         }
                         MouseEventKind::ScrollDown => {
                             app.scroll_offset = app.scroll_offset.saturating_add(3);
+                            app.needs_redraw = true;
                         }
                         _ => {}
                     },
                     AppEvent::Agent(agent_event) => {
                         app.handle_agent_event(agent_event);
+                        // Drain any additional queued agent events before next draw
+                        for ev in events.drain_agent_events() {
+                            app.handle_agent_event(ev);
+                        }
+                        app.needs_redraw = true;
+                    }
+                    AppEvent::Resize(_w, _h) => {
+                        app.needs_redraw = true;
                     }
                     AppEvent::Tick => {
                         if let Some(ref mut ob) = app.onboarding {
                             ob.tick();
+                            // Only redraw on tick when onboarding has animations
+                            if matches!(ob.step, OnboardingStep::Welcome | OnboardingStep::Writing)
+                            {
+                                app.needs_redraw = true;
+                            }
                             // Auto-advance from Writing → Done after a brief pause
                             if ob.step == OnboardingStep::Writing && ob.tick % 30 == 0 {
                                 match ob.finalize() {
                                     Ok(()) => {
-                                        // Transition to chat
                                         app.onboarding = None;
                                     }
                                     Err(e) => {
-                                        // If write fails, drop to chat with error
                                         app.onboarding = None;
                                         app.messages.push(app::ChatMessage {
                                             sender: "Error".to_string(),
@@ -92,6 +118,7 @@ impl Tui {
                                         });
                                     }
                                 }
+                                app.needs_redraw = true;
                             }
                         }
                     }
