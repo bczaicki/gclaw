@@ -4,6 +4,7 @@ use gclaw_core::types::*;
 use gclaw_core::{GclawError, Result};
 use ollama_rs::generation::chat::request::ChatMessageRequest;
 use ollama_rs::generation::chat::{ChatMessage, ChatMessageResponse, MessageRole};
+use ollama_rs::generation::parameters::{KeepAlive, TimeUnit};
 use ollama_rs::Ollama;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -13,6 +14,7 @@ use tracing::debug;
 pub struct OllamaProvider {
     client: Arc<Ollama>,
     default_model: String,
+    keep_alive: Option<KeepAlive>,
 }
 
 impl OllamaProvider {
@@ -21,6 +23,27 @@ impl OllamaProvider {
         Self {
             client: Arc::new(Ollama::new(host, port)),
             default_model: default_model.to_string(),
+            keep_alive: None,
+        }
+    }
+
+    pub fn with_keep_alive(mut self, minutes: u32) -> Self {
+        self.keep_alive = if minutes == 0 {
+            Some(KeepAlive::Indefinitely)
+        } else {
+            Some(KeepAlive::Until {
+                time: minutes as u64,
+                unit: TimeUnit::Minutes,
+            })
+        };
+        self
+    }
+
+    fn apply_keep_alive(&self, req: ChatMessageRequest) -> ChatMessageRequest {
+        if let Some(ref ka) = self.keep_alive {
+            req.keep_alive(ka.clone())
+        } else {
+            req
         }
     }
 }
@@ -82,7 +105,7 @@ impl LlmProvider for OllamaProvider {
         };
 
         let messages = to_ollama_messages(&request.messages);
-        let chat_req = ChatMessageRequest::new(model.to_string(), messages);
+        let chat_req = self.apply_keep_alive(ChatMessageRequest::new(model.to_string(), messages));
 
         debug!("Sending chat request to Ollama model: {model}");
         let resp = self
@@ -105,7 +128,7 @@ impl LlmProvider for OllamaProvider {
         };
 
         let messages = to_ollama_messages(&request.messages);
-        let chat_req = ChatMessageRequest::new(model.to_string(), messages);
+        let chat_req = self.apply_keep_alive(ChatMessageRequest::new(model.to_string(), messages));
 
         let stream = self
             .client

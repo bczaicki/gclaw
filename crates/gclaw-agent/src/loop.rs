@@ -5,6 +5,7 @@ use futures::StreamExt;
 use gclaw_core::traits::{LlmProvider, Memory};
 use gclaw_core::types::*;
 use gclaw_core::{GclawError, Result};
+use std::borrow::Cow;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc;
@@ -96,6 +97,7 @@ pub struct AgentLoop {
     model: String,
     max_iterations: usize,
     system_prompt: String,
+    history_limit: usize,
 }
 
 impl AgentLoop {
@@ -106,6 +108,7 @@ impl AgentLoop {
         model: String,
         max_iterations: usize,
         system_prompt: String,
+        history_limit: usize,
     ) -> Self {
         Self {
             provider,
@@ -114,6 +117,7 @@ impl AgentLoop {
             model,
             max_iterations,
             system_prompt,
+            history_limit,
         }
     }
 
@@ -124,16 +128,16 @@ impl AgentLoop {
         event_tx: Option<mpsc::UnboundedSender<AgentEvent>>,
         skill_context: Option<&str>,
     ) -> Result<String> {
-        let system = if let Some(ctx_str) = skill_context {
-            format!("{}\n\n{}", self.system_prompt, ctx_str)
+        let system: Cow<str> = if let Some(ctx_str) = skill_context {
+            Cow::Owned(format!("{}\n\n{}", self.system_prompt, ctx_str))
         } else {
-            self.system_prompt.clone()
+            Cow::Borrowed(&self.system_prompt)
         };
-        let mut ctx = ConversationContext::new(system);
+        let mut ctx = ConversationContext::new(system.into_owned());
         ctx.set_tools(self.executor.definitions());
 
         // Load history and compress if needed
-        let history = self.memory.retrieve(conversation_id, 50).await?;
+        let history = self.memory.retrieve(conversation_id, self.history_limit).await?;
         ctx.load_history(history);
         ctx.compress_if_needed(MAX_CONTEXT_TOKENS, KEEP_RECENT_MESSAGES);
 

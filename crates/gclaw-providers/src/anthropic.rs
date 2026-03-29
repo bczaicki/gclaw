@@ -10,11 +10,35 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::pin::Pin;
+use std::time::Duration;
 use tracing::debug;
 
 // ---------------------------------------------------------------------------
 // Anthropic Messages API serde types
 // ---------------------------------------------------------------------------
+
+#[derive(Serialize, Clone)]
+struct CacheControl {
+    #[serde(rename = "type")]
+    cache_type: String,
+}
+
+impl CacheControl {
+    fn ephemeral() -> Self {
+        Self {
+            cache_type: "ephemeral".to_string(),
+        }
+    }
+}
+
+#[derive(Serialize, Clone)]
+struct SystemBlock {
+    #[serde(rename = "type")]
+    block_type: String,
+    text: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    cache_control: Option<CacheControl>,
+}
 
 #[derive(Serialize)]
 struct AnthropicRequest {
@@ -22,12 +46,20 @@ struct AnthropicRequest {
     max_tokens: u32,
     messages: Vec<AnthropicMessage>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    system: Option<String>,
+    system: Option<SystemField>,
     #[serde(skip_serializing_if = "Option::is_none")]
     temperature: Option<f32>,
     stream: bool,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     tools: Vec<AnthropicToolDef>,
+}
+
+/// System field can be a plain string or an array of blocks (for prompt caching).
+#[derive(Serialize)]
+#[serde(untagged)]
+enum SystemField {
+    Text(String),
+    Blocks(Vec<SystemBlock>),
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -71,6 +103,8 @@ struct AnthropicToolDef {
     name: String,
     description: String,
     input_schema: serde_json::Value,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    cache_control: Option<CacheControl>,
 }
 
 // --- Response types ---
@@ -175,7 +209,10 @@ struct AnthropicErrorDetail {
 // Conversion helpers
 // ---------------------------------------------------------------------------
 
-fn to_anthropic_messages(messages: &[Message]) -> (Option<String>, Vec<AnthropicMessage>) {
+fn to_anthropic_messages(
+    messages: &[Message],
+    prompt_caching: bool,
+) -> (Option<SystemField>, Vec<AnthropicMessage>) {
     let mut system_prompt = None;
     let mut result = Vec::new();
 
@@ -183,7 +220,15 @@ fn to_anthropic_messages(messages: &[Message]) -> (Option<String>, Vec<Anthropic
         match msg.role {
             Role::System => {
                 // Anthropic uses a top-level system field, not a system message
-                system_prompt = Some(msg.content.clone());
+                if prompt_caching {
+                    system_prompt = Some(SystemField::Blocks(vec![SystemBlock {
+                        block_type: "text".to_string(),
+                        text: msg.content.clone(),
+                        cache_control: Some(CacheControl::ephemeral()),
+                    }]));
+                } else {
+                    system_prompt = Some(SystemField::Text(msg.content.clone()));
+                }
             }
             Role::User => {
                 result.push(AnthropicMessage {
@@ -236,13 +281,23 @@ fn to_anthropic_messages(messages: &[Message]) -> (Option<String>, Vec<Anthropic
     (system_prompt, result)
 }
 
-fn to_anthropic_tools(tools: &[ToolDefinition]) -> Vec<AnthropicToolDef> {
+fn to_anthropic_tools(tools: &[ToolDefinition], prompt_caching: bool) -> Vec<AnthropicToolDef> {
+    let len = tools.len();
     tools
         .iter()
-        .map(|t| AnthropicToolDef {
-            name: t.name.clone(),
-            description: t.description.clone(),
-            input_schema: t.parameters.clone(),
+        .enumerate()
+        .map(|(i, t)| {
+            let cache_control = if prompt_caching && i == len - 1 {
+                Some(CacheControl::ephemeral())
+            } else {
+                None
+            };
+            AnthropicToolDef {
+                name: t.name.clone(),
+                description: t.description.clone(),
+                input_schema: t.parameters.clone(),
+                cache_control,
+            }
         })
         .collect()
 }
@@ -300,6 +355,7 @@ pub struct AnthropicProvider {
     base_url: String,
     default_model: String,
     max_tokens: u32,
+    prompt_caching: bool,
 }
 
 impl AnthropicProvider {
@@ -310,17 +366,31 @@ impl AnthropicProvider {
             base_url.trim_end_matches('/').to_string()
         };
 
+        let client = Client::builder()
+            .pool_max_idle_per_host(2)
+            .pool_idle_timeout(Duration::from_secs(90))
+            .connect_timeout(Duration::from_secs(10))
+            .timeout(Duration::from_secs(300))
+            .build()
+            .expect("Failed to build HTTP client");
+
         Self {
-            client: Client::new(),
+            client,
             api_key: api_key.to_string(),
             base_url,
             default_model: default_model.to_string(),
             max_tokens: DEFAULT_MAX_TOKENS,
+            prompt_caching: true,
         }
     }
 
     pub fn with_max_tokens(mut self, max_tokens: u32) -> Self {
         self.max_tokens = max_tokens;
+        self
+    }
+
+    pub fn with_prompt_caching(mut self, enabled: bool) -> Self {
+        self.prompt_caching = enabled;
         self
     }
 
@@ -352,7 +422,7 @@ impl LlmProvider for AnthropicProvider {
         let model = self.resolve_model(&request.model);
         debug!("Anthropic complete: model={model}");
 
-        let (system, messages) = to_anthropic_messages(&request.messages);
+        let (system, messages) = to_anthropic_messages(&request.messages, self.prompt_caching);
 
         let api_req = AnthropicRequest {
             model: model.clone(),
@@ -361,15 +431,21 @@ impl LlmProvider for AnthropicProvider {
             system,
             temperature: request.temperature,
             stream: false,
-            tools: to_anthropic_tools(&request.tools),
+            tools: to_anthropic_tools(&request.tools, self.prompt_caching),
         };
 
-        let resp = self
+        let mut req_builder = self
             .client
             .post(format!("{}/v1/messages", self.base_url))
             .header("x-api-key", &self.api_key)
             .header("anthropic-version", ANTHROPIC_VERSION)
-            .header("content-type", "application/json")
+            .header("content-type", "application/json");
+
+        if self.prompt_caching {
+            req_builder = req_builder.header("anthropic-beta", "prompt-caching-2024-07-31");
+        }
+
+        let resp = req_builder
             .json(&api_req)
             .send()
             .await
@@ -400,7 +476,7 @@ impl LlmProvider for AnthropicProvider {
         let model = self.resolve_model(&request.model);
         debug!("Anthropic stream: model={model}");
 
-        let (system, messages) = to_anthropic_messages(&request.messages);
+        let (system, messages) = to_anthropic_messages(&request.messages, self.prompt_caching);
 
         let api_req = AnthropicRequest {
             model,
@@ -409,15 +485,21 @@ impl LlmProvider for AnthropicProvider {
             system,
             temperature: request.temperature,
             stream: true,
-            tools: to_anthropic_tools(&request.tools),
+            tools: to_anthropic_tools(&request.tools, self.prompt_caching),
         };
 
-        let resp = self
+        let mut req_builder = self
             .client
             .post(format!("{}/v1/messages", self.base_url))
             .header("x-api-key", &self.api_key)
             .header("anthropic-version", ANTHROPIC_VERSION)
-            .header("content-type", "application/json")
+            .header("content-type", "application/json");
+
+        if self.prompt_caching {
+            req_builder = req_builder.header("anthropic-beta", "prompt-caching-2024-07-31");
+        }
+
+        let resp = req_builder
             .json(&api_req)
             .send()
             .await

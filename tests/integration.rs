@@ -71,6 +71,7 @@ async fn agent_loop_end_to_end() {
         "qwen3.5:4b".to_string(),
         5,
         "You are a helpful assistant. Be very brief.".to_string(),
+        50,
     );
 
     let response = agent
@@ -97,6 +98,7 @@ async fn agent_loop_with_streaming() {
         "qwen3.5:4b".to_string(),
         5,
         "You are a helpful assistant. Be very brief.".to_string(),
+        50,
     );
 
     let (tx, mut rx) = mpsc::unbounded_channel();
@@ -135,6 +137,7 @@ async fn memory_persists_across_calls() {
         "qwen3.5:4b".to_string(),
         5,
         "You are a helpful assistant. Be very brief.".to_string(),
+        50,
     );
 
     // First message

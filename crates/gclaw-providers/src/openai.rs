@@ -7,6 +7,7 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::pin::Pin;
+use std::time::Duration;
 use tracing::debug;
 
 // ---------------------------------------------------------------------------
@@ -244,8 +245,16 @@ impl OpenAiProvider {
             base_url.trim_end_matches('/').to_string()
         };
 
+        let client = Client::builder()
+            .pool_max_idle_per_host(2)
+            .pool_idle_timeout(Duration::from_secs(90))
+            .connect_timeout(Duration::from_secs(10))
+            .timeout(Duration::from_secs(300))
+            .build()
+            .expect("Failed to build HTTP client");
+
         Self {
-            client: Client::new(),
+            client,
             api_key: api_key.to_string(),
             base_url,
             default_model: default_model.to_string(),

@@ -4,6 +4,10 @@ active = "ollama"  # "ollama", "openai", or "anthropic"
 [provider.ollama]
 url = "http://localhost:11434"
 default_model = "qwen3.5:9b"
+# Minutes to keep model loaded in GPU memory (0 = indefinitely)
+keep_alive_minutes = 30
+# Preload model into GPU memory on startup for faster first response
+preload_model = true
 
 [provider.openai]
 base_url = "https://api.openai.com/v1"  # or any OpenAI-compatible endpoint
@@ -15,11 +19,15 @@ base_url = "https://api.anthropic.com"
 api_key = ""  # or set ANTHROPIC_API_KEY env var
 default_model = "claude-sonnet-4-6"
 max_tokens = 8192
+# Enable prompt caching for system prompt and tool definitions (reduces TTFT)
+prompt_caching = true
 
 [agent]
 max_iterations = 10
 system_prompt = "You are a helpful assistant."
 # workspace_dir = "./workspace"  # Path to SOUL.md, IDENTITY.md, etc. (default: ./workspace)
+# Max conversation messages to load from memory (lower = faster TTFT)
+history_limit = 20
 
 [channels.telegram]
 enabled = false

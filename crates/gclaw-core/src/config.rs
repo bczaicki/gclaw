@@ -105,6 +105,9 @@ pub struct AnthropicConfig {
     pub default_model: String,
     #[serde(default = "default_anthropic_max_tokens")]
     pub max_tokens: u32,
+    /// Enable Anthropic prompt caching for system prompt and tool definitions
+    #[serde(default = "default_true")]
+    pub prompt_caching: bool,
 }
 
 fn default_anthropic_url() -> String {
@@ -126,6 +129,7 @@ impl Default for AnthropicConfig {
             api_key: String::new(),
             default_model: default_anthropic_model(),
             max_tokens: default_anthropic_max_tokens(),
+            prompt_caching: default_true(),
         }
     }
 }
@@ -136,6 +140,20 @@ pub struct OllamaConfig {
     pub url: String,
     #[serde(default = "default_model")]
     pub default_model: String,
+    /// Minutes to keep model loaded in memory (0 = indefinitely)
+    #[serde(default = "default_keep_alive_minutes")]
+    pub keep_alive_minutes: u32,
+    /// Preload model into GPU memory on startup
+    #[serde(default = "default_true")]
+    pub preload_model: bool,
+}
+
+fn default_keep_alive_minutes() -> u32 {
+    30
+}
+
+fn default_true() -> bool {
+    true
 }
 
 fn default_ollama_url() -> String {
@@ -154,6 +172,13 @@ pub struct AgentConfig {
     pub system_prompt: String,
     #[serde(default)]
     pub workspace_dir: Option<String>,
+    /// Max conversation messages to load from memory
+    #[serde(default = "default_history_limit")]
+    pub history_limit: usize,
+}
+
+fn default_history_limit() -> usize {
+    20
 }
 
 fn default_max_iterations() -> usize {
@@ -261,6 +286,8 @@ impl Default for OllamaConfig {
         Self {
             url: default_ollama_url(),
             default_model: default_model(),
+            keep_alive_minutes: default_keep_alive_minutes(),
+            preload_model: default_true(),
         }
     }
 }
@@ -271,6 +298,7 @@ impl Default for AgentConfig {
             max_iterations: default_max_iterations(),
             system_prompt: default_system_prompt(),
             workspace_dir: None,
+            history_limit: default_history_limit(),
         }
     }
 }
@@ -426,7 +454,7 @@ system_prompt = "Be concise."
     fn default_config_values() {
         let cfg = Config::default();
         assert_eq!(cfg.provider.ollama.url, "http://localhost:11434");
-        assert_eq!(cfg.provider.ollama.default_model, "qwen3.5:9b");
+        assert_eq!(cfg.provider.ollama.default_model, "qwen3.5:4b");
         assert_eq!(cfg.agent.system_prompt, "You are a helpful assistant.");
         assert!(!cfg.container.enabled);
         assert_eq!(cfg.provider.active, "ollama");

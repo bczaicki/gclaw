@@ -163,7 +163,8 @@ fn main() -> anyhow::Result<()> {
             (
                 Arc::new(
                     AnthropicProvider::new(&api_key, &config.provider.anthropic.base_url, &m)
-                        .with_max_tokens(config.provider.anthropic.max_tokens),
+                        .with_max_tokens(config.provider.anthropic.max_tokens)
+                        .with_prompt_caching(config.provider.anthropic.prompt_caching),
                 ),
                 m,
             )
@@ -174,11 +175,39 @@ fn main() -> anyhow::Result<()> {
                 .unwrap_or_else(|| config.provider.ollama.default_model.clone());
             info!("Using Ollama provider at {}", config.provider.ollama.url);
             (
-                Arc::new(OllamaProvider::new(&config.provider.ollama.url, &m)),
+                Arc::new(
+                    OllamaProvider::new(&config.provider.ollama.url, &m)
+                        .with_keep_alive(config.provider.ollama.keep_alive_minutes),
+                ),
                 m,
             )
         }
     };
+
+    // Preload Ollama model into GPU memory if configured
+    if config.provider.active == "ollama" && config.provider.ollama.preload_model {
+        info!("Preloading Ollama model: {model}");
+        let provider_clone = provider.clone();
+        let model_clone = model.clone();
+        rt.block_on(async {
+            use gclaw_core::types::{CompletionRequest, Message, Role};
+            let req = CompletionRequest {
+                model: model_clone,
+                messages: vec![Message {
+                    role: Role::User,
+                    content: "hi".to_string(),
+                    tool_calls: vec![],
+                    tool_call_id: None,
+                }],
+                tools: vec![],
+                temperature: None,
+            };
+            match provider_clone.complete(req).await {
+                Ok(_) => info!("Model preloaded successfully"),
+                Err(e) => warn!("Model preload failed (non-fatal): {e}"),
+            }
+        });
+    }
 
     // Memory
     let db_path = log_dir.join("memory.db");
@@ -242,6 +271,7 @@ fn main() -> anyhow::Result<()> {
         model.clone(),
         config.agent.max_iterations,
         system_prompt,
+        config.agent.history_limit,
     ));
 
     // Gateway message channel — all channels send InboundMessages here
