@@ -31,7 +31,7 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
         }
     };
 
-    let line = Line::from(vec![
+    let mut spans = vec![
         Span::styled(
             format!(" {} ", app.model_name),
             Style::default()
@@ -45,7 +45,23 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
         ),
         Span::raw("│ "),
         state_str,
-    ]);
+    ];
+
+    if let Some(ttft) = app.last_ttft_ms {
+        spans.push(Span::raw(" │ "));
+        spans.push(Span::styled(
+            format!("TTFT: {ttft}ms"),
+            Style::default().fg(Color::Cyan),
+        ));
+    }
+    if let Some(total) = app.last_total_ms {
+        spans.push(Span::styled(
+            format!("  Total: {total}ms"),
+            Style::default().fg(Color::Cyan),
+        ));
+    }
+
+    let line = Line::from(spans);
 
     let status =
         Paragraph::new(line).block(Block::default().borders(Borders::ALL).title(" Status "));

@@ -8,7 +8,8 @@ use gclaw_core::{GclawError, Result};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc;
-use tracing::{debug, warn};
+use std::time::Instant;
+use tracing::{debug, info, warn};
 
 /// Accumulates tool call deltas from the stream into complete ToolCall objects.
 /// OpenAI and Anthropic both stream tool calls incrementally — first delta has
@@ -168,15 +169,23 @@ impl AgentLoop {
                     let req = request.clone();
                     let tx = tx.clone();
                     async move {
+                        let t0 = Instant::now();
                         let mut stream = provider.complete_stream(req).await?;
+                        let t_stream = t0.elapsed();
+                        debug!(elapsed_ms = t_stream.as_millis() as u64, "Stream created");
+
                         let mut parser = ThinkParser::new();
                         let mut tool_acc = ToolCallAccumulator::default();
+                        let mut first_token_time: Option<std::time::Duration> = None;
 
                         while let Some(result) = stream.next().await {
                             match result {
                                 Ok(delta) => {
                                     if let Some(ref text) = delta.content {
                                         if !text.is_empty() {
+                                            if first_token_time.is_none() {
+                                                first_token_time = Some(t0.elapsed());
+                                            }
                                             parser.feed(text, &tx);
                                         }
                                     }
@@ -193,6 +202,20 @@ impl AgentLoop {
                                 }
                             }
                         }
+
+                        let total = t0.elapsed();
+                        let ttft = first_token_time.unwrap_or(total);
+                        info!(
+                            ttft_ms = ttft.as_millis() as u64,
+                            stream_created_ms = t_stream.as_millis() as u64,
+                            total_ms = total.as_millis() as u64,
+                            "Generation metrics"
+                        );
+                        let _ = tx.send(AgentEvent::Metrics {
+                            ttft_ms: ttft.as_millis() as u64,
+                            total_ms: total.as_millis() as u64,
+                            stream_created_ms: t_stream.as_millis() as u64,
+                        });
 
                         parser.flush(&tx);
                         Ok((parser.content().to_string(), tool_acc.finish()))

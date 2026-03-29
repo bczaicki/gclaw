@@ -143,7 +143,7 @@ fn default_ollama_url() -> String {
 }
 
 fn default_model() -> String {
-    "qwen3.5:9b".to_string()
+    "qwen3.5:4b".to_string()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

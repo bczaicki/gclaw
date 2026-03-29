@@ -60,6 +60,9 @@ pub struct App {
     pub startup_warnings: Vec<String>,
     /// Known skill names for slash-command dispatch.
     pub skill_names: Vec<String>,
+    pub last_ttft_ms: Option<u64>,
+    pub last_total_ms: Option<u64>,
+    pub last_stream_created_ms: Option<u64>,
 }
 
 impl App {
@@ -88,6 +91,9 @@ impl App {
             onboarding: None,
             startup_warnings: Vec::new(),
             skill_names: Vec::new(),
+            last_ttft_ms: None,
+            last_total_ms: None,
+            last_stream_created_ms: None,
         }
     }
 
@@ -180,6 +186,9 @@ impl App {
                 self.streaming_content.clear();
                 self.is_thinking = false;
                 self.thinking_collapsed = false;
+                self.last_ttft_ms = None;
+                self.last_total_ms = None;
+                self.last_stream_created_ms = None;
                 self.agent_state = AgentState::Thinking;
                 return SubmitResult::SkillInvocation {
                     name: cmd.to_string(),
@@ -198,6 +207,9 @@ impl App {
         self.streaming_content.clear();
         self.is_thinking = false;
         self.thinking_collapsed = false;
+        self.last_ttft_ms = None;
+        self.last_total_ms = None;
+        self.last_stream_created_ms = None;
         self.agent_state = AgentState::Thinking;
         SubmitResult::Message(input)
     }
@@ -250,6 +262,15 @@ impl App {
                 self.streaming_content.clear();
                 self.is_thinking = false;
                 self.agent_state = AgentState::Idle;
+            }
+            AgentEvent::Metrics {
+                ttft_ms,
+                total_ms,
+                stream_created_ms,
+            } => {
+                self.last_ttft_ms = Some(ttft_ms);
+                self.last_total_ms = Some(total_ms);
+                self.last_stream_created_ms = Some(stream_created_ms);
             }
             AgentEvent::Error(err) => {
                 self.messages.push(ChatMessage {

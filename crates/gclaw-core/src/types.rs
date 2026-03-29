@@ -103,4 +103,9 @@ pub enum AgentEvent {
     },
     Done(String),
     Error(String),
+    Metrics {
+        ttft_ms: u64,
+        total_ms: u64,
+        stream_created_ms: u64,
+    },
 }
