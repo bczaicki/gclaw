@@ -3,7 +3,7 @@ active = "ollama"  # "ollama", "openai", or "anthropic"
 
 [provider.ollama]
 url = "http://localhost:11434"
-default_model = "qwen3.5:9b"
+default_model = "gemma4:e4b"
 
 [provider.openai]
 base_url = "https://api.openai.com/v1"  # or any OpenAI-compatible endpoint

@@ -1,0 +1,13 @@
+# Default owner for everything
+* @bczaicki
+
+# Crate-specific ownership (add co-maintainers as the community grows)
+crates/gclaw-core/       @bczaicki
+crates/gclaw-agent/      @bczaicki
+crates/gclaw-providers/  @bczaicki
+crates/gclaw-channels/   @bczaicki
+crates/gclaw-tui/        @bczaicki
+crates/gclaw-mcp/        @bczaicki
+
+# CI and release
+.github/                 @bczaicki

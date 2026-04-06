@@ -1,0 +1,24 @@
+#!/bin/sh
+#
+# Pre-commit hook for gclaw
+# Enable with: git config core.hooksPath .githooks
+
+set -e
+
+echo "Running pre-commit checks..."
+
+echo "  Checking format..."
+cargo fmt --all --check 2>&1 || {
+    echo ""
+    echo "Format check failed. Run 'cargo fmt --all' to fix, then commit again."
+    exit 1
+}
+
+echo "  Running clippy..."
+cargo clippy --all-targets --workspace -- -D warnings 2>&1 || {
+    echo ""
+    echo "Clippy found warnings. Fix them before committing."
+    exit 1
+}
+
+echo "Pre-commit checks passed."

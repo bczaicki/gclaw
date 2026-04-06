@@ -1,6 +1,10 @@
 # gclaw
-<img width="2048" height="2048" alt="Gemini_Generated_Image_yj80igyj80igyj80" src="https://github.com/user-attachments/assets/019e880a-0a16-43d5-b174-f9ab240d1e5a" />
 
+[![CI](https://github.com/bczaicki/gclaw/actions/workflows/ci.yml/badge.svg)](https://github.com/bczaicki/gclaw/actions/workflows/ci.yml)
+[![License: LGPL-2.1](https://img.shields.io/badge/license-LGPL--2.1-blue.svg)](LICENSE)
+[![Audit](https://github.com/bczaicki/gclaw/actions/workflows/audit.yml/badge.svg)](https://github.com/bczaicki/gclaw/actions/workflows/audit.yml)
+
+<img width="2048" height="2048" alt="Gemini_Generated_Image_yj80igyj80igyj80" src="https://github.com/user-attachments/assets/019e880a-0a16-43d5-b174-f9ab240d1e5a" />
 
 A local-first AI agent gateway that runs tool calls in containers for security. Chat with LLMs through a TUI, or connect WhatsApp, Telegram, Slack, and Discord -- all from your own machine.
 
@@ -52,7 +56,7 @@ active = "ollama"
 
 [provider.ollama]
 url = "http://localhost:11434"
-default_model = "qwen3.5:9b"
+default_model = "gemma4:e4b"
 ```
 
 ### Anthropic (Claude)
@@ -181,7 +185,7 @@ Options:
 
 ## Architecture
 
-Five Rust crates in a Cargo workspace:
+Six Rust crates in a Cargo workspace:
 
 | Crate | Role |
 |-------|------|
@@ -190,6 +194,7 @@ Five Rust crates in a Cargo workspace:
 | `gclaw-providers` | Ollama, OpenAI, Anthropic LLM providers |
 | `gclaw-channels` | Telegram, Discord, Slack, WhatsApp, TUI channel adapters |
 | `gclaw-tui` | Terminal UI (ratatui), onboarding wizard, conversation management |
+| `gclaw-mcp` | MCP (Model Context Protocol) client and transport |
 
 ```
   Telegram ──┐
@@ -210,6 +215,15 @@ cargo fmt --check    # format check
 ```
 
 Logs go to `~/Library/Application Support/gclaw/gclaw.log` (macOS) or `$XDG_DATA_HOME/gclaw/gclaw.log`.
+
+## Contributing
+
+We welcome contributions! Whether it's bug reports, feature requests, documentation, or code -- all help is appreciated.
+
+- Read the [Contributing Guide](CONTRIBUTING.md) to get started
+- Check out issues labeled [**good first issue**](https://github.com/bczaicki/gclaw/issues?q=label%3A%22good+first+issue%22) for beginner-friendly tasks
+- See the [Code of Conduct](CODE_OF_CONDUCT.md) for community guidelines
+- Report security vulnerabilities via [SECURITY.md](SECURITY.md) (not public issues)
 
 ## License
 
