@@ -1045,6 +1045,8 @@ dependencies = [
  "dirs",
  "futures",
  "gclaw-core",
+ "glob",
+ "regex",
  "reqwest",
  "serde",
  "serde_json",
@@ -1052,6 +1054,7 @@ dependencies = [
  "tokio",
  "toml",
  "tracing",
+ "walkdir",
 ]
 
 [[package]]

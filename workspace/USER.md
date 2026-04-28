@@ -1,13 +1,12 @@
 # USER
 
-- **Name:**
-- **Pronouns:**
-- **Timezone:**
+- **Name:** B
+- **Timezone:** US/PST
 
 ## Current Projects
 
--
+- GClaw
 
 ## Preferences
 
-- **Communication:**
+- **Communication:** concise

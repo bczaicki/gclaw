@@ -2,6 +2,6 @@
 
 ## Local Environment
 
-- **OS:**
-- **Shell:**
-- **Default editor:**
+- **OS:** macos (aarch64)
+- **Shell:** zsh
+- **Default editor:** neovim

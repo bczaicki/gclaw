@@ -1,5 +1,8 @@
 use clap::{Parser, Subcommand};
-use gclaw_agent::tools::{FileReadTool, FileWriteTool, ListDirTool, ShellExecTool, WebFetchTool};
+use gclaw_agent::tools::{
+    FileEditTool, FileReadTool, FileWriteTool, GlobTool, GrepTool, ListDirTool, ShellExecTool,
+    WebFetchTool,
+};
 use gclaw_agent::{load_plugins, AgentLoop, ContainerExecutor, SkillRegistry, ToolExecutor};
 use gclaw_core::traits::{Channel, LlmProvider};
 use gclaw_core::types::{AgentEvent, InboundMessage, OutboundMessage};
@@ -189,7 +192,10 @@ fn main() -> anyhow::Result<()> {
     executor.register(Arc::new(ShellExecTool));
     executor.register(Arc::new(FileReadTool));
     executor.register(Arc::new(FileWriteTool));
+    executor.register(Arc::new(FileEditTool));
     executor.register(Arc::new(ListDirTool));
+    executor.register(Arc::new(GlobTool));
+    executor.register(Arc::new(GrepTool));
     executor.register(Arc::new(WebFetchTool::new()));
 
     // Wrap in container executor if enabled (plugins loaded below after workspace resolution)

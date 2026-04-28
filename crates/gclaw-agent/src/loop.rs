@@ -11,12 +11,17 @@ use tokio::sync::mpsc;
 use tracing::{debug, warn};
 
 /// Accumulates tool call deltas from the stream into complete ToolCall objects.
-/// OpenAI and Anthropic both stream tool calls incrementally — first delta has
-/// the id and name, subsequent deltas append to the arguments string.
-/// Merges deltas by index to reconstruct complete calls.
+/// OpenAI and Anthropic both stream tool calls incrementally: the first delta
+/// for a call carries the id and name, then subsequent deltas append argument
+/// fragments. Dispatch is by id — a non-empty id starts a new builder; an
+/// empty id appends args to the most recently started builder. Indexing by
+/// position within a single SSE delta would be wrong: providers emit one
+/// fragment per delta, so multiple parallel tool calls would otherwise all
+/// collapse onto the same builder.
 #[derive(Default)]
 struct ToolCallAccumulator {
     calls: Vec<ToolCallBuilder>,
+    current: Option<usize>,
 }
 
 struct ToolCallBuilder {
@@ -26,28 +31,23 @@ struct ToolCallBuilder {
 }
 
 impl ToolCallAccumulator {
-    fn push_delta(&mut self, delta: &ToolCall, index: usize) {
-        // Grow the vec if needed
-        while self.calls.len() <= index {
+    fn push_delta(&mut self, delta: &ToolCall) {
+        if !delta.id.is_empty() {
             self.calls.push(ToolCallBuilder {
-                id: String::new(),
-                name: String::new(),
+                id: delta.id.clone(),
+                name: delta.name.clone(),
                 arguments: String::new(),
             });
+            self.current = Some(self.calls.len() - 1);
         }
 
-        let builder = &mut self.calls[index];
-        if !delta.id.is_empty() {
-            builder.id = delta.id.clone();
-        }
-        if !delta.name.is_empty() {
-            builder.name = delta.name.clone();
-        }
-        // Accumulate arguments — they arrive as string fragments for OpenAI,
-        // or as partial_json for Anthropic
         let arg_str = delta.arguments.as_str().unwrap_or("");
-        if !arg_str.is_empty() {
-            builder.arguments.push_str(arg_str);
+        if arg_str.is_empty() {
+            return;
+        }
+
+        if let Some(idx) = self.current {
+            self.calls[idx].arguments.push_str(arg_str);
         }
     }
 
@@ -180,8 +180,8 @@ impl AgentLoop {
                                             parser.feed(text, &tx);
                                         }
                                     }
-                                    for (i, tc) in delta.tool_calls.iter().enumerate() {
-                                        tool_acc.push_delta(tc, i);
+                                    for tc in &delta.tool_calls {
+                                        tool_acc.push_delta(tc);
                                     }
                                     if delta.done {
                                         break;
@@ -300,14 +300,11 @@ mod tests {
     #[test]
     fn tool_call_accumulator_single_delta() {
         let mut acc = ToolCallAccumulator::default();
-        acc.push_delta(
-            &ToolCall {
-                id: "call_1".to_string(),
-                name: "shell_exec".to_string(),
-                arguments: serde_json::json!(r#"{"command":"ls"}"#),
-            },
-            0,
-        );
+        acc.push_delta(&ToolCall {
+            id: "call_1".to_string(),
+            name: "shell_exec".to_string(),
+            arguments: serde_json::Value::String(r#"{"command":"ls"}"#.to_string()),
+        });
         let calls = acc.finish();
         assert_eq!(calls.len(), 1);
         assert_eq!(calls[0].name, "shell_exec");
@@ -318,23 +315,17 @@ mod tests {
     fn tool_call_accumulator_multi_delta() {
         let mut acc = ToolCallAccumulator::default();
         // First delta: id + name + partial args
-        acc.push_delta(
-            &ToolCall {
-                id: "call_1".to_string(),
-                name: "shell_exec".to_string(),
-                arguments: serde_json::Value::String(r#"{"comma"#.to_string()),
-            },
-            0,
-        );
+        acc.push_delta(&ToolCall {
+            id: "call_1".to_string(),
+            name: "shell_exec".to_string(),
+            arguments: serde_json::Value::String(r#"{"comma"#.to_string()),
+        });
         // Second delta: rest of args
-        acc.push_delta(
-            &ToolCall {
-                id: String::new(),
-                name: String::new(),
-                arguments: serde_json::Value::String(r#"nd":"ls"}"#.to_string()),
-            },
-            0,
-        );
+        acc.push_delta(&ToolCall {
+            id: String::new(),
+            name: String::new(),
+            arguments: serde_json::Value::String(r#"nd":"ls"}"#.to_string()),
+        });
         let calls = acc.finish();
         assert_eq!(calls.len(), 1);
         assert_eq!(calls[0].name, "shell_exec");
@@ -344,26 +335,67 @@ mod tests {
     #[test]
     fn tool_call_accumulator_multiple_tools() {
         let mut acc = ToolCallAccumulator::default();
-        acc.push_delta(
-            &ToolCall {
-                id: "call_1".to_string(),
-                name: "shell_exec".to_string(),
-                arguments: serde_json::Value::String(r#"{"command":"ls"}"#.to_string()),
-            },
-            0,
-        );
-        acc.push_delta(
-            &ToolCall {
-                id: "call_2".to_string(),
-                name: "file_read".to_string(),
-                arguments: serde_json::Value::String(r#"{"path":"foo.txt"}"#.to_string()),
-            },
-            1,
-        );
+        acc.push_delta(&ToolCall {
+            id: "call_1".to_string(),
+            name: "shell_exec".to_string(),
+            arguments: serde_json::Value::String(r#"{"command":"ls"}"#.to_string()),
+        });
+        acc.push_delta(&ToolCall {
+            id: "call_2".to_string(),
+            name: "file_read".to_string(),
+            arguments: serde_json::Value::String(r#"{"path":"foo.txt"}"#.to_string()),
+        });
         let calls = acc.finish();
         assert_eq!(calls.len(), 2);
         assert_eq!(calls[0].name, "shell_exec");
         assert_eq!(calls[1].name, "file_read");
+    }
+
+    /// Regression: when the model emits two parallel tool calls, the Anthropic
+    /// stream sends ContentBlockStart for each one followed by InputJsonDelta
+    /// fragments, all arriving as separate StreamDeltas (each with a single
+    /// tool_call entry). Previously the accumulator indexed by position within
+    /// the delta's vec, which is always 0, so both calls collapsed onto one
+    /// builder and the file_write never actually ran.
+    #[test]
+    fn tool_call_accumulator_parallel_anthropic_style() {
+        let mut acc = ToolCallAccumulator::default();
+        // Tool A: ContentBlockStart
+        acc.push_delta(&ToolCall {
+            id: "tu_A".to_string(),
+            name: "file_write".to_string(),
+            arguments: serde_json::Value::String(String::new()),
+        });
+        // Tool A: InputJsonDelta fragments
+        acc.push_delta(&ToolCall {
+            id: String::new(),
+            name: String::new(),
+            arguments: serde_json::Value::String(r#"{"path":"a.txt","#.to_string()),
+        });
+        acc.push_delta(&ToolCall {
+            id: String::new(),
+            name: String::new(),
+            arguments: serde_json::Value::String(r#""content":"A"}"#.to_string()),
+        });
+        // Tool B: ContentBlockStart
+        acc.push_delta(&ToolCall {
+            id: "tu_B".to_string(),
+            name: "file_write".to_string(),
+            arguments: serde_json::Value::String(String::new()),
+        });
+        // Tool B: InputJsonDelta fragments
+        acc.push_delta(&ToolCall {
+            id: String::new(),
+            name: String::new(),
+            arguments: serde_json::Value::String(r#"{"path":"b.txt","content":"B"}"#.to_string()),
+        });
+
+        let calls = acc.finish();
+        assert_eq!(calls.len(), 2);
+        assert_eq!(calls[0].id, "tu_A");
+        assert_eq!(calls[0].arguments, serde_json::json!({"path": "a.txt", "content": "A"}));
+        assert_eq!(calls[1].id, "tu_B");
+        assert_eq!(calls[1].arguments, serde_json::json!({"path": "b.txt", "content": "B"}));
     }
 
     #[test]
