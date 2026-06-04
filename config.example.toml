@@ -46,3 +46,39 @@ enabled = false
 runtime = "docker"  # or "podman"
 image = "gclaw-sandbox:latest"
 # Build the sandbox image: docker build -t gclaw-sandbox:latest -f Dockerfile.sandbox .
+
+# -----------------------------------------------------------------------------
+# MCP servers (Model Context Protocol)
+#
+# Each server is launched on stdio and its tools are registered with the agent
+# as mcp__{server}__{tool}. Tools become callable by the model alongside the
+# built-in file/shell tools. Failed servers are logged and skipped — they
+# never crash gclaw.
+#
+# [mcp_servers.filesystem]
+# command = "npx"
+# args = ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"]
+#
+# [mcp_servers.github]
+# command = "gh"
+# args = ["mcp"]
+# env = { GITHUB_TOKEN = "${env:GITHUB_TOKEN}" }
+#
+# [mcp_servers.sqlite]
+# command = "uvx"
+# args = ["mcp-server-sqlite", "--db-path", "/tmp/test.db"]
+# -----------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------
+# Skills (prompt templates invoked as /name args)
+#
+# Skills are not configured here — they're discovered from these directories
+# (later locations override earlier ones):
+#   1. ~/.gclaw/skills/<name>/SKILL.md      (user-level)
+#   2. ./.gclaw/skills/<name>/SKILL.md      (project-level)
+#   3. <workspace_dir>/skills/<name>/SKILL.md (workspace-level)
+#
+# Each SKILL.md has YAML frontmatter (description, argument-hint, etc.) plus
+# a markdown body that's injected as extra system context when invoked. The
+# body can use $ARGUMENTS, $1, $2, ... for argument substitution.
+# -----------------------------------------------------------------------------
